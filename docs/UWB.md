@@ -45,7 +45,9 @@ AirTagのBLE広告解析は別の仕組みで、iPhoneのUWB接続が成立し�
 - `_FindingAdvertiser._configureSpatialInteractionAdvertiserWithPeer:advertisement:`（`0x1003df3bc`）はトークンの `getIRK` と `getSessionIdentifier` を読み、UWB設定を広告側へ渡します。不正なIRKを拒否する分岐もあります。
 - `NIServerFindingAdvertisement.byteRepresentation`（`0x1003e6910`）は役割、6バイトのアドレス、status、payload、追加OOB情報などをOPACKにまとめます。これは内部の表現で、OPACK全体をそのままBLEの無線パケットとして送れることを意味しません。
 - `NIServerFindingRangingProvider` には `NBAMMS` 用の設定を作る処理と、IRKからアドレスを求める処理があります。公開Android FiRa設定との対応は未確認です。
-- `NIServerNBAMMSSession` はFinder/Findee双方のchallenge/responseと、相互認証の状態を持ちます。`NIServerCryptoSession._deriveSessionKeyFromKeyDerivationKey:sessionIdentifier:`（`0x10029ac98`）ではHKDFのパラメーターを作り、32バイトの導出先を渡す処理を確認しました。実際の所有者の鍵は読み出していません。
+- `NIServerNBAMMSSession` はFinder/Findee双方のchallenge/responseと、相互認証の状態を持ちます。追加解析でHKDF-SHA256の入力、AES-CCMのエンベロープ、SipHash-2-4によるresponse生成まで追跡しました。実際の所有者の鍵は読み出していません。
+
+追加調査のアドレス、入力形式、Mac版のトークン関連サービス、ダミーデータでの検証結果は [24A446の詳細記録](UWB-24A446.md) にまとめています。検証用の `tools/verify_uwb_crypto.py` は無線・アカウントへアクセスせず、暗号関数だけを比較します。この成功はiPhoneへのUWB接続成功を示しません。
 
 探索開始に必要なコードの場所は絞れましたが、iPhoneアプリ本体の全解析、必要なトークンの正規の取得経路、無線上の完全な交換手順、GalaxyのUWB APIへの対応付けと実測は未完了です。`localFindable` にはPencilなどのアクセサリー用の処理も含まれるため、同名の経路をiPhone本体の鍵取得と見なしていません。`NIRangingAuthConfiguration` など他用途のクラスも、そのまま「探す」のプロトコルと見なしていません。
 
