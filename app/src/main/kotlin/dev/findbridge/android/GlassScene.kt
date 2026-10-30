@@ -26,6 +26,7 @@ internal class GlassScene(private val mapView: View) {
     private var pending = false
     private var lastSnapshot = 0L
     private var disposed = false
+    private var active = true
     private var cameraSample: CameraSample? = null
     private var movingMap: MapLibreMap? = null
     private var lastCapturedCamera: CameraPosition? = null
@@ -75,7 +76,7 @@ internal class GlassScene(private val mapView: View) {
     }
 
     fun capture(map: MapLibreMap, immediate: Boolean = false) {
-        if (disposed || pending || width == 0 || height == 0) return
+        if (disposed || !active || pending || width == 0 || height == 0) return
         val moving = movingMap != null
         val position = map.cameraPosition
         if (moving) {
@@ -140,7 +141,7 @@ internal class GlassScene(private val mapView: View) {
     }
 
     fun startTracking(map: MapLibreMap) {
-        if (disposed || movingMap != null) return
+        if (disposed || !active || movingMap != null) return
         movingMap = map
         lastCapturedCamera = null
         Choreographer.getInstance().postFrameCallback(motionFrame)
@@ -149,6 +150,11 @@ internal class GlassScene(private val mapView: View) {
     fun stopTracking() {
         movingMap = null
         Choreographer.getInstance().removeFrameCallback(motionFrame)
+    }
+
+    fun setActive(value: Boolean) {
+        active = value
+        if (!value) stopTracking()
     }
 
     /**

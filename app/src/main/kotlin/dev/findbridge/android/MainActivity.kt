@@ -1656,6 +1656,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     override fun onResume() {
         super.onResume()
+        glass.setActive(true)
         foreground = true
         google.setForeground(true)
         mapView.onResume()
@@ -1666,7 +1667,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onPause() {
-        glass.stopTracking()
+        glass.setActive(false)
         frameRate.setMoving(false)
         foreground = false
         google.setForeground(false)
