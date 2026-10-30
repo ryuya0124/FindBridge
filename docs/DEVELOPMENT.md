@@ -74,7 +74,7 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 
 接続中の一時受け渡しはプロセス内の一度だけ取得できるオブジェクトです。Intent、ログ、savedInstanceStateへパスワードを入れません。入力欄と認証WebViewは状態保存を無効にし、認証WebViewの履歴・フォームをBundleへ保存しません。FLAG_SECUREを設定します。保存パスワードは再表示しません。
 
-セッション復元を優先し、期限切れまたは保存セッションなしの場合だけ自動接続します。単なるネットワーク障害では再認証しません。自動試行は5分間隔で、失敗やキャンセルで停止し、所有者の再接続操作で再開します。バックグラウンド認証・確認コードの自動取得はありません。
+単なるネットワーク障害では再認証しません。自動ログインは失敗やキャンセルで停止し、所有者の再接続操作で再開します。バックグラウンド認証・確認コードの自動取得はありません。
 
 `apple-autologin.js` は保存を許可された情報をメモリ内で挿入し、HTTPSの `idmsa.apple.com` / `account.apple.com` の認証パスだけへ投入します。`apple-login-landing.js` はiCloudの接続入口、`apple-login-relay.js` はApple認証iframeの実際の親子Windowと完全一致するoriginを各段で検証します。ボタンは従来のIDに加えて、8言語のサインイン／続けるに対応します。ブリッジに資格情報を流しません。新しい確認コードは本人が入力します。
 
