@@ -9,6 +9,35 @@ internal object MapStyles {
         val style =
             JSONObject(context.assets.open("map-style.json").bufferedReader().use { it.readText() })
         val layers = style.getJSONArray("layers")
+        val locale = context.resources.configuration.locales[0]
+        val languages =
+            when (locale.language) {
+                "ja" -> listOf("ja", "nonlatin", "")
+                "ko" -> listOf("ko", "nonlatin", "")
+                "zh" ->
+                    listOf(
+                        if (locale.script == "Hant" || locale.country == "TW") "zh-Hant"
+                        else "zh-Hans",
+                        "zh",
+                        "nonlatin",
+                        "",
+                    )
+                else -> listOf(locale.language, "en", "latin", "").distinct()
+            }
+        for (index in 0 until layers.length()) {
+            val layout = layers.getJSONObject(index).optJSONObject("layout") ?: continue
+            if (layout.opt("text-field")?.toString()?.contains("name:ja") == true) {
+                val names = JSONArray().put("coalesce")
+                languages.forEach { language ->
+                    names.put(
+                        JSONArray()
+                            .put("get")
+                            .put(if (language.isEmpty()) "name" else "name:$language")
+                    )
+                }
+                layout.put("text-field", names)
+            }
+        }
         if (dark)
             for (index in 0 until layers.length()) {
                 val layer = layers.getJSONObject(index)

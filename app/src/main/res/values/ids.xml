@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="motion_springs" type="id" />
+    <item name="motion_press" type="id" />
+</resources>

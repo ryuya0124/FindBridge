@@ -6,6 +6,24 @@ import org.junit.Test
 
 class UrlPolicyTest {
     @Test
+    fun savedCredentialsAreRestrictedToExactAppleAuthenticationOrigins() {
+        listOf(
+                "https://idmsa.apple.com/appleauth/auth/authorize/signin",
+                "https://account.apple.com/auth/authorize",
+            )
+            .forEach { assertTrue(UrlPolicy.isCredentialOrigin(it)) }
+        listOf(
+                "http://idmsa.apple.com/",
+                "https://idmsa.apple.com.evil.example/",
+                "https://www.icloud.com/",
+                "https://user@idmsa.apple.com/",
+                "https://idmsa.apple.com:8443/",
+                "https://idmsa.apple.com./",
+            )
+            .forEach { assertFalse(it, UrlPolicy.isCredentialOrigin(it)) }
+    }
+
+    @Test
     fun applePagesUseExactHttpsDomains() {
         listOf(
                 UrlPolicy.findUrl,

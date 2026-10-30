@@ -13,8 +13,8 @@ android {
         applicationId = "dev.findbridge.android"
         minSdk = 28
         targetSdk = 37
-        versionCode = 3
-        versionName = "3.0.0"
+        versionCode = 4
+        versionName = "3.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += "arm64-v8a"
@@ -47,6 +47,7 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    bundle { language { enableSplit = false } }
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -72,6 +73,8 @@ kotlin {
 }
 
 dependencies {
+    implementation("androidx.dynamicanimation:dynamicanimation:1.1.0")
+    implementation("androidx.window:window-java:1.5.1")
     implementation("androidx.webkit:webkit:1.18.0")
     implementation("org.maplibre.gl:android-sdk:13.7.1")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.21")

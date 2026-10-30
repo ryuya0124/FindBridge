@@ -13,6 +13,8 @@ import org.json.JSONObject
 
 /** Only initClient and refreshClient are permitted. Mutating device APIs are absent. */
 internal class AppleRepository private constructor(context: Context) {
+    private val application = context.applicationContext as android.app.Application
+
     fun interface Listener {
         fun onChanged()
     }
@@ -32,7 +34,11 @@ internal class AppleRepository private constructor(context: Context) {
     var loading = false
         private set
 
-    var error = ""
+    private var errorRes = 0
+    val error
+        get() = if (errorRes == 0) "" else AppLanguage.text(application, errorRes)
+
+    var requiresSignIn = false
         private set
 
     var nativeTransportVerified = false
@@ -79,6 +85,7 @@ internal class AppleRepository private constructor(context: Context) {
                         .put("userAgent", userAgent)
                         .put("savedAt", System.currentTimeMillis())
                 generation++
+                loading = false
                 applyResponse(response)
                 val snapshot = JSONObject(session.toString())
                 executor.execute { runCatching { store.save(snapshot) } }
@@ -100,7 +107,8 @@ internal class AppleRepository private constructor(context: Context) {
                     ?.let { AppleDevice.fromJson(it, owners) }
             }
         updatedAt = System.currentTimeMillis()
-        error = ""
+        errorRes = 0
+        requiresSignIn = false
         changed()
     }
 
@@ -133,11 +141,12 @@ internal class AppleRepository private constructor(context: Context) {
                     main.post {
                         if (generation == requestGeneration) {
                             loading = false
-                            error =
+                            requiresSignIn = failure is AuthenticationExpiredException
+                            errorRes =
                                 if (failure is AuthenticationExpiredException) {
-                                    "Appleへのサインインが必要です"
+                                    R.string.sign_in_required
                                 } else {
-                                    "更新できませんでした。接続を確認して再試行してください。"
+                                    R.string.refresh_failed
                                 }
                             changed()
                         }
@@ -195,7 +204,8 @@ internal class AppleRepository private constructor(context: Context) {
         devices = emptyList()
         familyMembers = emptyList()
         loading = false
-        error = ""
+        errorRes = 0
+        requiresSignIn = false
         nativeTransportVerified = false
         // Queue after any pending save so an in-flight response cannot resurrect a logged-out
         // session.

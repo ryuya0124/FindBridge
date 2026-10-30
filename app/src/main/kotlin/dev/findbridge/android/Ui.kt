@@ -79,6 +79,8 @@ internal object Ui {
             background = ripple(if (primary) green else surface, dp(18))
             setPadding(dp(14), dp(8), dp(14), dp(8))
             minHeight = dp(48)
+            stateListAnimator = null
+            NativeMotion.press(this, .965f)
         }
 
     fun Activity.space(parent: LinearLayout, height: Int) {

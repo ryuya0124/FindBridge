@@ -1,22 +1,23 @@
 # 検証記録
 
-2026-10-30（JST）。アプリ3.0.0。認証情報、正確な位置・住所、所有者名は記録しません。
+2026-10-30（JST）。アプリ3.1.0。認証情報、正確な位置・住所、所有者名は記録しません。
 
 ## 環境と成果物
 
 - macOS / Apple Silicon、Android Emulator 37.2.13
 - Android 17 / API 37 / arm64、Pixel 8 AVD
 - デバッグ検証：`FindBridge_API37` / `emulator-5556`
-- リリース検証：新規 `FindBridge_Release_API37` / `emulator-5558`
+- リリース検証：`FindBridge_Release_API37`（3.0.0から上書き更新） / `emulator-5558`
+- 大画面：Pixel Tablet AVD、Pixel Fold AVD（開・閉・半開き、回転）
 - compileSdk / targetSdk 37、minSdk 28
 - JDK 21、Kotlin 2.4.21、AGP 9.5.0、Gradle 9.8.2
-- `FindBridge-3.0.0-arm64-release.apk`：5,411,654 bytes（5.16 MiB）
-- APK SHA-256：`35d32551d375463abddf725d908bbb781eceaf00d227831a5723e076ed8141d1`
+- `FindBridge-3.1.0-arm64-release.apk`：5,660,178 bytes（5.40 MiB）
+- APK SHA-256：`4b12c79f2f58dfd23d3df4ebc4352ece90ef15ea5e329bd5ccf5cf4c2bbaa2a5`
 - 署名証明書 SHA-256：`f2150829315c625a37d84eb48385635aa1ede42696b28f8c4204e239231be670`
 
 専用RSA 3072ビット鍵によるAPK v2署名を `apksigner verify` で確認。配布APKはdebuggableではなく、ABIはarm64-v8aのみです。署名鍵・パスワードはリポジトリ外に保管しています。
 
-2.0.0の複数ABIを含むdebug APK（59,087,173 bytes）に対して90.84%縮小しました。R8、リソース縮小、arm64限定、圧縮JNIを使用しています。インストール後の展開サイズとは異なります。
+2.0.0の複数ABIを含むdebug APK（59,087,173 bytes）に対して90.42%縮小しました。R8、リソース縮小、arm64限定、圧縮JNIを使用しています。インストール後の展開サイズとは異なります。
 
 ## 自動検証
 
@@ -27,13 +28,19 @@
   :app:lintDebug :app:lintRelease :app:testDebugUnitTest
 ```
 
-- 単体テスト5件：許可URLの境界、位置なし・状態表示など。失敗0件。
+- 単体テスト13件：URL/originの境界、欠損位置、幅・Insets・ヒンジの配置5件、シートの停止位置と抵抗2件。失敗0件。
 - debug / release Lint：ともに `No issues found.`
-- API 37エミュレータのinstrumentation 7件：すべて成功。
+- API 37スマートフォンのinstrumentation全16件：失敗0。実アカウント用liveを有効にし、自動ログインと外部開閉の2件はこの実行ではskip。
   - `NativeUiTest` 2件：ネイティブMapView、主画面のWebView不在、欠損位置。
-  - `NativeFeaturesTest` 3件：所有者ID照合、位置情報オフ、追加ファイルの人・持ち物・Pencil振り分けとネイティブ詳細、暗色／航空写真スタイル。
-  - `NativeSessionLiveTest` 1件：保存セッションからKotlin HTTPで実デバイスを取得、マーカーの可視範囲、無効なサウンド操作。
-  - `FamilyMetadataLiveTest` 1件：実アカウントの家族メタデータとデバイス所有者の照合。
+  - `NativeFeaturesTest` 3件：家族の所有者ID照合、追加ファイルの人・持ち物・Pencil振り分けと詳細、暗色／航空写真。
+  - `NativeSessionLiveTest` / `FamilyMetadataLiveTest` 各1件：Kotlin HTTPの実デバイス取得、マーカー範囲、家族情報、無効なサウンド。
+  - `MotionAndLayoutTest` 3件：Choreographerでタブ移動の途中フレームを測定、連打後の停止先、シートのドラッグ割り込みとスナップ、動きを減らす設定とネイティブ地図ボタン。
+  - `AdaptiveUiTest` 1件：現在のウィンドウ内で一覧・タブ・操作部が重ならない配置。
+  - `LocalizationAndVaultTest` 2件：8言語のラベル・数量・全地図モード、独立したテスト領域で暗号化・平文不在・復号・改ざん時停止・再試行間隔。
+  - `LoginInputProtectionTest` 1件：パスワードのマスク、入力欄の状態保存無効、FLAG_SECURE。
+- `AutomaticLoginLiveTest` 1件を別途明示して成功。所有者が保存した実アカウント情報で、ローカルのセッションとCookieをクリアし、公式サインインからデバイス・家族情報を再取得。入力・送信を人が補助せず完了。
+- `FoldContinuityLiveTest` 1件を別途明示して成功。fixtureの詳細を開いた状態でホストから実際にエミュレータを閉じ、開き、ウィンドウサイズの変化と選択の継続を確認。
+- Pixel Tabletと開いたPixel Fold：配置、fixture、スタイル、8言語、暗号化の計6件ずつ成功。半開き・回転でヒンジが水平になる状態でも6件成功。最終描画コードで開いたFoldと半開きを再確認。
 
 追加ファイルのテストは明示的なfixtureを使用し、終了時に設定とファイルを削除しています。実際の人・AirTag・Pencilの取得テストには含めません。
 
@@ -50,7 +57,10 @@
 - 同じ署名鍵で再ビルドした最終APKを上書きしても、保存セッションが維持されること。
 - release主画面のUI階層にWebViewがないこと。
 
-このFind Devices接続では追加の2段階認証は要求されませんでした。認証情報はアプリの設定やリポジトリへ保存していません。
+- v3.1.0のネイティブ入力画面で、所有者の許可に基づいて保存・自動ログインを有効にし、リリース版でも自動サインインしてネイティブ画面へ戻ること。
+- 同じ鍵の最終APKで上書きし、force-stop後も再入力なく復元すること。保存したログイン情報による「再接続」操作と、エミュレータの再起動後の復元も確認。
+
+このFind Devices接続では追加の2段階認証は要求されませんでした。確認コードを自動処理する機能はありません。実アカウント情報はエミュレータのアプリ専用領域へAndroid Keystoreで暗号化して保存しています。パスワードをリポジトリ・平文設定・テスト引数・UI状態・ログへ保存していません。
 
 ## 画面の実表示
 
@@ -58,6 +68,9 @@
 - 航空写真は国土地理院の実タイルを読み込み、出典を表示。
 - 地図の実画像に基づくガラス背景、浮いたタブ、ドラッグ可能な一覧、明暗に追従する文字と操作部を確認。
 - 地図設定と外観設定の保存、Activityの再生成後の反映を確認。
+- 地図が読めること、右上の44dpの地図／位置矢印、ガラスの縁、タブ・設定パネル・選択ピンを確認。
+- 地図のidle→snapshotが連続する描画負荷と、ぼかし済み背景への余分なGPUぼかしを修正。修正後に地図の輪郭・地名とタブの途中フレームを再確認。
+- Tabletのサイドバー、開いたFoldの縦タブ、閉じた外側画面、半開き時の上下ペイン。
 
 ## 実行していない操作と残る範囲
 
@@ -65,4 +78,4 @@
 
 人・持ち物・Pencil ProのAppleサービスからの自動取得、実際のMac連携、Pencilの近距離探索は未実装／未検証です。HTTPS連携クライアントの契約は実装していますが、サーバーと復号処理は同梱していません。Macの暗号化データを読むための鍵抽出やOS保護設定の変更は行っていません。
 
-物理Android端末、API 28の描画フォールバック、海外の高倍率航空写真、長時間運転、バックグラウンド更新は未検証です。Apple側の非公開サービスとセッションの有効期間に依存します。
+物理Android端末と実機の折りたたみ、ハードウェアKeystore保護の検証、API 28の描画フォールバック、海外の高倍率航空写真、長時間運転、バックグラウンド更新は未検証です。Apple側の非公開サービスとセッションの有効期間に依存します。

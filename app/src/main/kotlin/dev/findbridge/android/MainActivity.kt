@@ -7,6 +7,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -14,23 +16,34 @@ import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.SeekBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.util.Consumer
+import androidx.dynamicanimation.animation.DynamicAnimation
+import androidx.dynamicanimation.animation.FloatValueHolder
+import androidx.dynamicanimation.animation.SpringAnimation
+import androidx.dynamicanimation.animation.SpringForce
+import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
+import androidx.window.layout.WindowLayoutInfo
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
 import dev.findbridge.android.Ui.space
 import org.maplibre.android.MapLibre
+import org.maplibre.android.annotations.Icon
 import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
@@ -44,29 +57,74 @@ import org.maplibre.android.maps.Style
 
 /** Every primary screen is drawn with native Android views and MapLibre's native renderer. */
 class MainActivity : Activity(), AppleRepository.Listener {
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
+
     private lateinit var repository: AppleRepository
+    private lateinit var loginVault: LoginVault
+    private var foreground = false
+    private var connecting = false
     private lateinit var locationSync: LocationSyncRepository
     private lateinit var appearance: AppearanceSettings
     private lateinit var glass: GlassScene
     private lateinit var root: FrameLayout
     private lateinit var mapView: MapView
     private var map: MapLibreMap? = null
-    private lateinit var sheet: LinearLayout
+    private lateinit var sheet: SheetGestureLayout
     private lateinit var body: LinearLayout
-    private lateinit var tabs: LinearLayout
+    private lateinit var bodyHost: FrameLayout
+    private lateinit var pageMotion: PageMotion
+    private lateinit var tabs: NativeTabBar
     private lateinit var controls: LinearLayout
+    private lateinit var mapButton: MapControlButton
+    private lateinit var recenterButton: MapControlButton
+    private var panel: GlassPanel? = null
     private lateinit var attribution: TextView
     private lateinit var statusPill: TextView
     private val markers = mutableMapOf<Marker, String>()
+    private val markerById = mutableMapOf<String, Marker>()
+    private val markerKinds = mutableMapOf<String, String>()
+    private val iconCache = mutableMapOf<String, Icon>()
+    private lateinit var selectedPin: ImageView
+    private var pinId: String? = null
     private var selectedId: String? = null
     private var accountTab = false
     private var activeTab = 1
     private var fitted = false
+    private var restoredCamera: DoubleArray? = null
     private var topInset = 0
     private var bottomInset = 0
+    private var leftInset = 0
+    private var rightInset = 0
+    private var foldRegion: FoldRegion? = null
+    private var lastLayoutMode: LayoutMode? = null
+    private var windowAdapter: WindowInfoTrackerCallbackAdapter? = null
+    private val foldListener =
+        Consumer<WindowLayoutInfo> { info ->
+            val feature = info.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull()
+            val region = feature?.let {
+                val b = it.bounds
+                FoldRegion(
+                    ScreenRect(b.left, b.top, b.right, b.bottom),
+                    it.orientation == FoldingFeature.Orientation.VERTICAL,
+                    it.isSeparating || it.state == FoldingFeature.State.HALF_OPENED,
+                )
+            }
+            if (region != foldRegion) {
+                foldRegion = region
+                panel?.dismiss(immediate = true)
+                layoutOverlays()
+                selected()?.let { focusDevice(it, sheetHeight.toFloat()) }
+            }
+        }
     private var sheetHeight = 0
-    private var dragY = 0f
-    private var dragHeight = 0
+    private var sheetSpring: SpringAnimation? = null
+    private var dragHeight = 0f
+    private var listHeight = 0
+    private var renderedPage = ""
+    private var pendingRender = false
+    private val scrollPositions = mutableMapOf<String, Int>()
     private val handler = Handler(Looper.getMainLooper())
     private val periodicRefresh =
         object : Runnable {
@@ -82,8 +140,15 @@ class MainActivity : Activity(), AppleRepository.Listener {
         if (Ui.dark) setTheme(R.style.Theme_FindBridge_Dark)
         super.onCreate(savedInstanceState)
         appearance = AppearanceSettings(this)
+        restoredCamera = savedInstanceState?.getDoubleArray("mapCamera")
+        sheetHeight = savedInstanceState?.getInt("sheetHeight", dp(390)) ?: dp(390)
+        listHeight = savedInstanceState?.getInt("listHeight", dp(390)) ?: dp(390)
+        savedInstanceState?.getBundle("scrollPositions")?.let { positions ->
+            positions.keySet().forEach { scrollPositions[it] = positions.getInt(it) }
+        }
         MapLibre.getInstance(this)
         repository = AppleRepository.get(this)
+        loginVault = LoginVault(this)
         locationSync = LocationSyncRepository.get(this)
         root =
             FrameLayout(this).apply {
@@ -101,6 +166,15 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 onCreate(savedInstanceState)
             }
         root.addView(mapView, FrameLayout.LayoutParams(-1, -1))
+        selectedPin =
+            ImageView(this).apply {
+                id = SELECTED_PIN_ID
+                visibility = View.INVISIBLE
+                isSoundEffectsEnabled = false
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                setOnClickListener { selectedId?.let(::select) }
+            }
+        root.addView(selectedPin, FrameLayout.LayoutParams(dp(66), dp(74)))
         glass = GlassScene(mapView).apply { intensity = appearance.glassIntensity }
         mapView.getMapAsync { value ->
             map = value
@@ -110,9 +184,25 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 isCompassEnabled = false
             }
             value.setMinZoomPreference(2.0)
-            value.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(36.2, 138.2), 4.5))
+            val savedCamera = restoredCamera
+            if (savedCamera != null && savedCamera.size == 5) {
+                value.moveCamera(
+                    CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder()
+                            .target(LatLng(savedCamera[0], savedCamera[1]))
+                            .zoom(savedCamera[2])
+                            .bearing(savedCamera[3])
+                            .tilt(savedCamera[4])
+                            .build()
+                    )
+                )
+                fitted = true
+            } else value.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(36.2, 138.2), 4.5))
             applyMapStyle()
-            value.addOnCameraMoveListener { glass.capture(value) }
+            value.addOnCameraMoveListener {
+                glass.capture(value)
+                positionSelectedPin()
+            }
             value.addOnCameraIdleListener { glass.capture(value, immediate = true) }
             mapView.addOnDidBecomeIdleListener { glass.capture(value, immediate = true) }
             value.setOnMarkerClickListener { marker ->
@@ -131,14 +221,24 @@ class MainActivity : Activity(), AppleRepository.Listener {
                     )
                 topInset = bars.top
                 bottomInset = bars.bottom
+                leftInset = bars.left
+                rightInset = bars.right
             } else {
                 topInset = insets.systemWindowInsetTop
                 bottomInset = insets.systemWindowInsetBottom
+                leftInset = insets.systemWindowInsetLeft
+                rightInset = insets.systemWindowInsetRight
             }
             layoutOverlays()
             insets
         }
         setContentView(root)
+        root.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
+            if (r - l != or - ol || b - t != ob - ot) {
+                panel?.dismiss(immediate = true)
+                layoutOverlays()
+            }
+        }
         selectedId = savedInstanceState?.getString("selected")
         activeTab = savedInstanceState?.getInt("tab", 1) ?: 1
         accountTab = activeTab == 3
@@ -152,6 +252,12 @@ class MainActivity : Activity(), AppleRepository.Listener {
         repository.addListener(this)
         locationSync.addListener(this)
         renderSheet()
+        if (savedInstanceState == null)
+            root.post {
+                NativeMotion.enter(sheet, dp(30).toFloat())
+                NativeMotion.enter(tabs, dp(22).toFloat(), 40)
+                NativeMotion.enter(controls, dp(-10).toFloat(), 65)
+            }
     }
 
     private fun roundButton(glyph: String, description: String) =
@@ -168,26 +274,29 @@ class MainActivity : Activity(), AppleRepository.Listener {
             stateListAnimator = null
             elevation = dp(5).toFloat()
             contentDescription = description
+            NativeMotion.press(this)
         }
 
     private fun createMapControls() {
         controls = column()
-        controls.addView(
-            roundButton("▱", "地図の表示設定").apply {
+        mapButton =
+            MapControlButton(this, glass, MapControlButton.Symbol.MAP).apply {
+                id = MAP_OPTIONS_ID
+                contentDescription = getString(R.string.map_options)
                 setOnClickListener { showMapSettings() }
-            },
-            LinearLayout.LayoutParams(dp(48), dp(48)),
-        )
-        space(controls, 10)
-        controls.addView(
-            roundButton("⌖", "すべてのデバイスを地図に表示").apply {
+            }
+        recenterButton =
+            MapControlButton(this, glass, MapControlButton.Symbol.LOCATION).apply {
+                id = RECENTER_ID
+                contentDescription = getString(R.string.show_all_devices)
                 setOnClickListener { fitDevices(force = true) }
-            },
-            LinearLayout.LayoutParams(dp(48), dp(48)),
-        )
-        root.addView(controls, FrameLayout.LayoutParams(dp(48), -2, Gravity.TOP or Gravity.END))
+            }
+        controls.addView(mapButton, LinearLayout.LayoutParams(dp(44), dp(44)))
+        space(controls, 8)
+        controls.addView(recenterButton, LinearLayout.LayoutParams(dp(44), dp(44)))
+        root.addView(controls, FrameLayout.LayoutParams(dp(44), -2, Gravity.TOP or Gravity.END))
         statusPill =
-            label("探す", 14, Ui.ink, true).apply {
+            label(getString(R.string.find_title), 14, Ui.ink, true).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(15), dp(9), dp(15), dp(9))
                 background = GlassDrawable(glass, this, dp(22).toFloat(), .22f)
@@ -201,11 +310,9 @@ class MainActivity : Activity(), AppleRepository.Listener {
                     Ui.rounded(if (Ui.dark) 0xc51c1c1e.toInt() else 0xdaffffff.toInt(), dp(5))
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("地図の出典")
-                        .setMessage(
-                            "© OpenFreeMap · openfreemap.org\n© OpenMapTiles · openmaptiles.org\n© OpenStreetMap contributors · openstreetmap.org/copyright\n\n航空写真：国土地理院 · 地理院タイル\nhttps://maps.gsi.go.jp/development/ichiran.html\n画像：Landsat8（GSI, TSIC, GEO Grid/AIST / USGS）, 海底地形 GEBCO, GRUS画像 © Axelspace\n世界衛星モザイク画像：NASA LP DAAC / USGS EROS Center"
-                        )
-                        .setPositiveButton("閉じる", null)
+                        .setTitle(getString(R.string.map_credits))
+                        .setMessage(getString(R.string.map_credits_body))
+                        .setPositiveButton(getString(R.string.close), null)
                         .show()
                 }
             }
@@ -214,32 +321,46 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     private fun applyMapStyle() {
         val current = map ?: return
+        mapButton.symbol =
+            if (appearance.mapMode == MapMode.STANDARD) MapControlButton.Symbol.MAP
+            else MapControlButton.Symbol.SATELLITE
+        mapButton.invalidate()
         fitted = false
         current.setStyle(
             Style.Builder().fromJson(MapStyles.create(this, appearance.mapMode, Ui.dark))
         ) {
+            current.clear()
+            markers.clear()
+            markerById.clear()
+            markerKinds.clear()
             renderMarkers()
-            if (selectedId != null) selected()?.let { select(it.id) } else fitDevices()
+            if (restoredCamera != null) {
+                restoredCamera = null
+                fitted = true
+                layoutSheet(updateCamera = true)
+            } else if (selectedId != null)
+                selected()?.let { focusDevice(it, sheetHeight.toFloat()) }
+            else fitDevices()
             glass.capture(current, immediate = true)
             if (::attribution.isInitialized)
                 attribution.text =
                     when (appearance.mapMode) {
                         MapMode.STANDARD -> "© OpenFreeMap · OpenMapTiles · OpenStreetMap"
-                        MapMode.AERIAL -> "出典：国土地理院 · 地理院タイル"
-                        MapMode.HYBRID -> "地理院タイル · © OpenStreetMap"
+                        MapMode.AERIAL -> getString(R.string.gsi_source)
+                        MapMode.HYBRID -> getString(R.string.gsi_hybrid_source)
                     }
         }
     }
 
     private fun showMapSettings() {
         val content = column().apply { setPadding(dp(22), dp(8), dp(22), dp(12)) }
-        content.addView(label("地図の表示", 20, Ui.ink, true))
+        content.addView(label(getString(R.string.map_view), 20, Ui.ink, true))
         space(content, 14)
         val modes = LinearLayout(this)
         val buttons = mutableListOf<Button>()
         MapMode.entries.forEach { mode ->
             val button =
-                actionButton(mode.label, appearance.mapMode == mode).apply {
+                actionButton(getString(mode.titleRes), appearance.mapMode == mode).apply {
                     textSize = 11f
                     setSingleLine()
                     ellipsize = TextUtils.TruncateAt.END
@@ -262,13 +383,13 @@ class MainActivity : Activity(), AppleRepository.Listener {
         }
         content.addView(modes)
         space(content, 18)
-        content.addView(label("外観", 16, Ui.ink, true))
+        content.addView(label(getString(R.string.appearance), 16, Ui.ink, true))
         space(content, 6)
-        val theme = actionButton(appearance.appearance.label, false)
+        val theme = actionButton(getString(appearance.appearance.titleRes), false)
         content.addView(theme, LinearLayout.LayoutParams(-1, dp(48)))
         theme.setOnClickListener { showAppearanceSettings() }
         space(content, 14)
-        content.addView(label("ガラスの透明感", 16, Ui.ink, true))
+        content.addView(label(getString(R.string.glass_intensity), 16, Ui.ink, true))
         content.addView(
             SeekBar(this).apply {
                 max = 100
@@ -295,39 +416,119 @@ class MainActivity : Activity(), AppleRepository.Listener {
             },
             LinearLayout.LayoutParams(-1, dp(44)),
         )
-        content.addView(label("航空写真は地理院タイルを使用します。国内は高解像度、国外は提供範囲に依存します。", 11, Ui.muted))
-        AlertDialog.Builder(this).setView(content).setPositiveButton("完了", null).show()
+        content.addView(label(getString(R.string.imagery_help), 11, Ui.muted))
+        space(content, 14)
+        content.addView(
+            Switch(this).apply {
+                text = getString(R.string.reduce_motion)
+                textSize = 15f
+                setTextColor(Ui.ink)
+                isChecked = appearance.reduceMotion
+                setOnCheckedChangeListener { _, checked -> appearance.reduceMotion = checked }
+            },
+            LinearLayout.LayoutParams(-1, dp(48)),
+        )
+        content.addView(label(getString(R.string.motion_help), 11, Ui.muted))
+        space(content, 14)
+        content.addView(label(getString(R.string.language), 16, Ui.ink, true))
+        content.addView(
+            actionButton(AppLanguage.label(this), false).apply {
+                setOnClickListener { showLanguageSettings() }
+            },
+            LinearLayout.LayoutParams(-1, dp(48)),
+        )
+        presentPanel(content, mapButton)
+    }
+
+    private fun showLanguageSettings() {
+        val content = column().apply { setPadding(dp(22), dp(12), dp(22), dp(12)) }
+        content.addView(label(getString(R.string.language), 22, Ui.ink, true))
+        space(content, 14)
+        AppLanguage.choices.forEach { (tag, name) ->
+            content.addView(
+                actionButton(
+                        if (tag.isEmpty()) getString(R.string.system) else name,
+                        tag == AppLanguage.selected(this),
+                    )
+                    .apply {
+                        setOnClickListener {
+                            panel?.dismiss(immediate = true)
+                            AppLanguage.select(this@MainActivity, tag)
+                        }
+                    },
+                LinearLayout.LayoutParams(-1, dp(48)),
+            )
+            space(content, 6)
+        }
+        presentPanel(content, mapButton)
     }
 
     private fun showAppearanceSettings() {
-        AlertDialog.Builder(this)
-            .setTitle("外観")
-            .setSingleChoiceItems(
-                Appearance.entries.map { it.label }.toTypedArray(),
-                appearance.appearance.ordinal,
-            ) { dialog, index ->
-                appearance.appearance = Appearance.entries[index]
-                dialog.dismiss()
-                recreate()
-            }
-            .setNegativeButton("キャンセル", null)
-            .show()
+        val content = column().apply { setPadding(dp(22), dp(12), dp(22), dp(12)) }
+        content.addView(label(getString(R.string.appearance), 22, Ui.ink, true))
+        space(content, 16)
+        Appearance.entries.forEach { choice ->
+            content.addView(
+                actionButton(getString(choice.titleRes), appearance.appearance == choice).apply {
+                    setOnClickListener {
+                        appearance.appearance = choice
+                        recreate()
+                    }
+                },
+                LinearLayout.LayoutParams(-1, dp(50)),
+            )
+            space(content, 8)
+        }
+        presentPanel(content, mapButton)
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createSheet() {
-        sheetHeight = dp(390)
         sheet =
-            column().apply {
+            SheetGestureLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
                 id = SHEET_ID
                 background = GlassDrawable(glass, this, dp(32).toFloat(), .72f)
                 elevation = dp(9).toFloat()
                 clipToOutline = true
+                canExpand = { sheetHeight < sheetStops().last() - dp(8) }
+                onDragStart = {
+                    sheetSpring?.cancel()
+                    dragHeight = sheetHeight.toFloat()
+                }
+                onDragBy = { delta ->
+                    dragHeight += delta
+                    val stops = sheetStops()
+                    sheetHeight =
+                        SheetDetents.resist(
+                                dragHeight,
+                                stops.first(),
+                                stops.last(),
+                                dp(110).toFloat(),
+                            )
+                            .toInt()
+                    layoutSheet(updateCamera = true)
+                }
+                onDragEnd = { velocity ->
+                    val stops = sheetStops()
+                    animateSheet(
+                        SheetDetents.target(
+                            sheetHeight.toFloat(),
+                            velocity,
+                            stops,
+                            dp(520).toFloat(),
+                        ),
+                        velocity,
+                        true,
+                    )
+                }
             }
         val handleArea =
             column().apply {
                 gravity = Gravity.CENTER
-                contentDescription = "デバイス一覧の高さを変更"
+                id = SHEET_HANDLE_ID
+                contentDescription = getString(R.string.resize_sheet)
+                isSoundEffectsEnabled = false
             }
         handleArea.addView(
             View(this).apply {
@@ -337,90 +538,46 @@ class MainActivity : Activity(), AppleRepository.Listener {
             LinearLayout.LayoutParams(dp(36), dp(5)),
         )
         handleArea.setOnClickListener {
-            sheetHeight =
-                if (sheetHeight < root.height / 2) root.height - topInset - dp(120) else dp(390)
-            layoutOverlays()
-        }
-        handleArea.setOnTouchListener { view, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    dragY = event.rawY
-                    dragHeight = sheet.height
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    sheetHeight =
-                        (dragHeight + (dragY - event.rawY).toInt()).coerceIn(
-                            dp(145),
-                            (root.height - topInset - dp(110)).coerceAtLeast(dp(145)),
-                        )
-                    layoutOverlays()
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (kotlin.math.abs(dragY - event.rawY) < dp(4)) view.performClick()
-                    true
-                }
-                else -> false
-            }
+            val stops = sheetStops()
+            animateSheet(
+                if (sheetHeight < stops[1] + dp(35)) stops.last() else stops[1],
+                followCamera = true,
+            )
         }
         sheet.addView(handleArea, LinearLayout.LayoutParams(-1, dp(25)))
+        bodyHost = FrameLayout(this)
         body = column()
-        sheet.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
+        bodyHost.addView(body, FrameLayout.LayoutParams(-1, -1))
+        pageMotion =
+            PageMotion(bodyHost).apply {
+                onSettled = {
+                    if (pendingRender) {
+                        pendingRender = false
+                        renderSheet()
+                    }
+                }
+            }
+        sheet.addView(bodyHost, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(sheet, FrameLayout.LayoutParams(-1, sheetHeight, Gravity.BOTTOM))
     }
 
     private fun createTabs() {
-        tabs =
-            LinearLayout(this).apply {
-                gravity = Gravity.CENTER
-                background = GlassDrawable(glass, this, dp(36).toFloat(), .24f)
-                elevation = dp(13).toFloat()
-                clipToOutline = true
-                setPadding(dp(5), dp(4), dp(5), dp(4))
-            }
-        addTab(0, "人を探す") { switchTab(0) }
-        addTab(1, "デバイス") { switchTab(1) }
-        addTab(2, "持ち物") { switchTab(2) }
-        addTab(3, "自分") { switchTab(3) }
+        tabs = NativeTabBar(this, glass, ::switchTab)
         root.addView(tabs, FrameLayout.LayoutParams(-1, dp(68), Gravity.BOTTOM))
-        updateTabs()
     }
 
-    private fun addTab(icon: Int, title: String, action: () -> Unit) {
-        val tab =
-            column().apply {
-                gravity = Gravity.CENTER
-                setPadding(0, dp(5), 0, dp(7))
-                contentDescription = title
-                addView(
-                    TabGlyph(this@MainActivity, icon),
-                    LinearLayout.LayoutParams(dp(28), dp(31)),
-                )
-                addView(label(title, 10, Ui.muted).apply { gravity = Gravity.CENTER })
-                setOnClickListener { action() }
-            }
-        tabs.addView(tab, LinearLayout.LayoutParams(0, dp(60), 1f))
-    }
-
-    private fun updateTabs() {
-        for (index in 0 until tabs.childCount) {
-            val selected = index == activeTab
-            val tab = tabs.getChildAt(index) as LinearLayout
-            val color = if (selected) Ui.green else Ui.muted
-            tab.background =
-                if (selected) Ui.rounded(if (Ui.dark) 0x3bffffff else 0x72ffffff, dp(30)) else null
-            (tab.getChildAt(0) as TabGlyph).tint = color
-            (tab.getChildAt(1) as TextView).setTextColor(color)
-        }
+    private fun updateTabs(animated: Boolean = true) {
+        tabs.update(activeTab, animated)
     }
 
     private fun switchTab(index: Int) {
+        if (index == activeTab && selectedId == null) return
+        val previous = activeTab
         activeTab = index
         accountTab = index == 3
         selectedId = null
         fitted = false
-        renderSheet()
+        renderSheet(if (index < previous) PageChange.TAB_LEFT else PageChange.TAB_RIGHT)
         updateTabs()
         renderMarkers()
         fitDevices(force = true)
@@ -457,78 +614,190 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     private fun showSourceSettings() {
         val content = column().apply { setPadding(dp(24), dp(12), dp(24), dp(12)) }
-        content.addView(label("人・持ち物の連携", 22, Ui.ink, true))
+        content.addView(label(getString(R.string.location_sources), 22, Ui.ink, true))
         space(content, 12)
         content.addView(
             label(
-                "人・持ち物の情報は、デバイス一覧とは別にAppleが暗号化しています。連携元の接続ファイル、または所有者が書き出した位置データを読み込めます。",
+                getString(R.string.source_help),
                 14,
                 Ui.muted,
             )
         )
         space(content, 18)
         content.addView(
-            actionButton("連携ファイルを選ぶ").apply { setOnClickListener { chooseLocationFile() } },
+            actionButton(getString(R.string.choose_source)).apply {
+                setOnClickListener { chooseLocationFile() }
+            },
             LinearLayout.LayoutParams(-1, dp(50)),
         )
         if (locationSync.configured) {
             space(content, 10)
             content.addView(
-                actionButton("連携を解除", false).apply {
+                actionButton(getString(R.string.disconnect_source), false).apply {
                     setOnClickListener { locationSync.disconnect() }
                 },
                 LinearLayout.LayoutParams(-1, dp(48)),
             )
         }
-        AlertDialog.Builder(this).setView(content).setPositiveButton("完了", null).show()
+        presentPanel(content)
+    }
+
+    private fun currentLayout(targetHeight: Int = sheetHeight): LayoutPlan =
+        AdaptiveLayout.calculate(
+            root.width,
+            root.height,
+            resources.displayMetrics.density,
+            ScreenInsets(leftInset, topInset, rightInset, bottomInset),
+            targetHeight,
+            foldRegion,
+        )
+
+    @SuppressLint("RtlHardcoded") // FoldingFeature bounds use physical window coordinates.
+    private fun place(view: View, area: ScreenRect) {
+        val params = view.layoutParams as FrameLayout.LayoutParams
+        if (
+            params.width == area.width &&
+                params.height == area.height &&
+                params.leftMargin == area.left &&
+                params.topMargin == area.top &&
+                params.gravity == (Gravity.TOP or Gravity.LEFT)
+        )
+            return
+        params.width = area.width
+        params.height = area.height
+        params.leftMargin = area.left
+        params.topMargin = area.top
+        params.bottomMargin = 0
+        params.rightMargin = 0
+        params.gravity = Gravity.TOP or Gravity.LEFT
+        view.layoutParams = params
     }
 
     private fun layoutOverlays() {
-        (controls.layoutParams as FrameLayout.LayoutParams).apply {
-            topMargin = topInset + dp(14)
-            rightMargin = dp(14)
-            controls.layoutParams = this
+        if (root.width == 0 || root.height == 0) return
+        val plan = currentLayout()
+        if (lastLayoutMode != plan.mode) {
+            sheetSpring?.cancel()
+            panel?.dismiss(immediate = true)
+            lastLayoutMode = plan.mode
         }
+        if (plan.mode == LayoutMode.PHONE)
+            sheetHeight =
+                sheetHeight.coerceIn(sheetStops().first().toInt(), sheetStops().last().toInt())
+        place(mapView, plan.map)
+        place(controls, plan.controls)
+        tabs.setVertical(plan.mode == LayoutMode.RAIL)
+        place(tabs, plan.tabs)
+        statusPill.visibility = if (plan.sidebar) View.INVISIBLE else View.VISIBLE
         (statusPill.layoutParams as FrameLayout.LayoutParams).apply {
             topMargin = topInset + dp(17)
-            leftMargin = dp(16)
+            leftMargin = leftInset + dp(16)
             statusPill.layoutParams = this
         }
-        val tabHeight = dp(68) + bottomInset + dp(12)
-        (tabs.layoutParams as FrameLayout.LayoutParams).apply {
-            height = dp(68)
-            bottomMargin = bottomInset + dp(8)
-            leftMargin = dp(16)
-            rightMargin = dp(16)
-            tabs.layoutParams = this
+        sheet.dragEnabled = plan.mode == LayoutMode.PHONE
+        sheet.findViewById<View>(SHEET_HANDLE_ID).visibility =
+            if (sheet.dragEnabled) View.VISIBLE else View.GONE
+        layoutSheet(updateCamera = true)
+    }
+
+    private fun sheetStops(): List<Float> {
+        val maximum =
+            (root.height - topInset - bottomInset - dp(156)).coerceAtLeast(dp(110)).toFloat()
+        val minimum = minOf(dp(138).toFloat(), maximum)
+        return listOf(minimum, minOf(dp(390).toFloat(), maximum), maximum)
+    }
+
+    private fun animateSheet(target: Float, velocity: Float = 0f, followCamera: Boolean = false) {
+        if (currentLayout().mode != LayoutMode.PHONE) return
+        val destination = target.coerceIn(sheetStops().first(), sheetStops().last())
+        if (NativeMotion.reduced(this)) {
+            sheetSpring?.cancel()
+            sheetHeight = destination.toInt()
+            layoutSheet(followCamera)
+            return
         }
-        (sheet.layoutParams as FrameLayout.LayoutParams).apply {
-            height = sheetHeight
-            bottomMargin = tabHeight + dp(8)
-            leftMargin = dp(8)
-            rightMargin = dp(8)
-            sheet.layoutParams = this
+        val current = sheetSpring
+        if (current?.isRunning == true) {
+            current.animateToFinalPosition(destination)
+            return
         }
+        sheetSpring =
+            SpringAnimation(FloatValueHolder(sheetHeight.toFloat())).apply {
+                spring = SpringForce(destination).setStiffness(360f).setDampingRatio(.86f)
+                setMinimumVisibleChange(.5f)
+                setStartVelocity(velocity.coerceIn(-dp(4000).toFloat(), dp(4000).toFloat()))
+                addUpdateListener { _, value, _ ->
+                    sheetHeight = value.toInt()
+                    layoutSheet(followCamera)
+                }
+                start()
+            }
+    }
+
+    @SuppressLint("RtlHardcoded") // Keep overlays aligned to physical hinge bounds.
+    private fun layoutSheet(updateCamera: Boolean = false) {
+        if (root.width == 0 || root.height == 0) return
+        val plan = currentLayout()
+        place(sheet, plan.sheet)
+        val attributionTop =
+            if (plan.mode == LayoutMode.PHONE) plan.sheet.top - dp(15)
+            else plan.map.bottom - bottomInset - dp(20)
         (attribution.layoutParams as FrameLayout.LayoutParams).apply {
-            bottomMargin = sheetHeight + tabHeight + dp(5)
-            leftMargin = dp(6)
+            gravity = Gravity.TOP or Gravity.LEFT
+            bottomMargin = 0
+            topMargin = attributionTop
+            leftMargin = if (plan.sidebar) plan.sheet.right + dp(12) else leftInset + dp(6)
             attribution.layoutParams = this
         }
-        if (selectedId != null) {
+        if (updateCamera && selectedId != null) {
+            val p = plan.camera
             map?.moveCamera(
                 CameraUpdateFactory.paddingTo(
-                    dp(25).toDouble(),
-                    (topInset + dp(35)).toDouble(),
-                    dp(25).toDouble(),
-                    (sheetHeight + tabHeight + dp(30)).toDouble(),
+                    p.left.toDouble(),
+                    p.top.toDouble(),
+                    p.right.toDouble(),
+                    p.bottom.toDouble(),
                 )
             )
         }
+        positionSelectedPin()
         glass.invalidate()
     }
 
-    private fun renderSheet() {
-        body.removeAllViews()
+    private fun presentPanel(content: LinearLayout, anchor: View? = null) {
+        panel?.dismiss(immediate = true)
+        mapButton.active = anchor === mapButton
+        panel =
+            GlassPanel(this, root, glass, content, anchor, currentLayout().popupBounds) {
+                panel = null
+                mapButton.active = false
+            }
+    }
+
+    private fun findScroll(view: View): ScrollView? {
+        if (view is ScrollView) return view
+        if (view is android.view.ViewGroup)
+            for (i in 0 until view.childCount) findScroll(view.getChildAt(i))?.let {
+                return it
+            }
+        return null
+    }
+
+    private fun renderSheet(change: PageChange = PageChange.NONE) {
+        if (!::bodyHost.isInitialized) return
+        if (renderedPage.isNotEmpty())
+            scrollPositions[renderedPage] = findScroll(body)?.scrollY ?: 0
+        val previous = body
+        body = column()
+        renderPage()
+        val key = "$activeTab:${selectedId.orEmpty()}"
+        renderedPage = key
+        pageMotion.replace(previous, body, change)
+        val scroll = findScroll(body)
+        scroll?.post { scroll.scrollTo(0, scrollPositions[key] ?: 0) }
+    }
+
+    private fun renderPage() {
         if (accountTab) {
             renderAccount()
             return
@@ -546,19 +815,23 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(22), dp(2), dp(14), dp(12))
             }
-        header.addView(label("デバイス", 28, Ui.ink, true), LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(
-            roundButton(if (repository.loading) "···" else "↻", "デバイスの位置を更新").apply {
+            label(getString(R.string.devices), 28, Ui.ink, true),
+            LinearLayout.LayoutParams(0, -2, 1f),
+        )
+        header.addView(
+            roundButton("↻", getString(R.string.refresh_devices)).apply {
                 id = REFRESH_ID
                 elevation = 0f
                 setTextColor(Ui.blue)
                 isEnabled = !repository.loading
+                if (repository.loading) NativeMotion.spin(this)
                 setOnClickListener { repository.refresh() }
             },
             LinearLayout.LayoutParams(dp(44), dp(44)),
         )
         header.addView(
-            roundButton("···", "アカウントメニュー").apply {
+            roundButton("···", getString(R.string.account_menu)).apply {
                 elevation = 0f
                 setTextColor(Ui.blue)
                 setOnClickListener(::accountMenu)
@@ -571,7 +844,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 label(repository.error, 12, 0xffd87520.toInt()).apply {
                     setPadding(dp(22), 0, dp(22), dp(8))
                     setOnClickListener {
-                        if (repository.error.contains("サインイン")) connect() else repository.refresh()
+                        if (repository.requiresSignIn) connect() else repository.refresh()
                     }
                 }
             )
@@ -581,7 +854,12 @@ class MainActivity : Activity(), AppleRepository.Listener {
         }
         if (visibleDevices().isEmpty()) {
             body.addView(
-                label(if (repository.loading) "デバイスを読み込んでいます…" else "デバイスがありません", 16, Ui.muted)
+                label(
+                        if (repository.loading) getString(R.string.loading_devices)
+                        else getString(R.string.no_devices),
+                        16,
+                        Ui.muted,
+                    )
                     .apply {
                         gravity = Gravity.CENTER
                     },
@@ -606,9 +884,18 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 val memberDevices = family.filter { it.ownerId == member.id }
                 if (memberDevices.isNotEmpty()) {
                     list.addView(
-                        label("${member.name}のデバイス", 15, Ui.ink, true).apply {
-                            setPadding(dp(22), dp(22), dp(22), dp(8))
-                        }
+                        label(
+                                getString(
+                                    R.string.owner_devices,
+                                    member.name.ifBlank { getString(R.string.family_member) },
+                                ),
+                                15,
+                                Ui.ink,
+                                true,
+                            )
+                            .apply {
+                                setPadding(dp(22), dp(22), dp(22), dp(8))
+                            }
                     )
                     memberDevices
                         .sortedWith(
@@ -622,7 +909,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun renderSharedList() {
-        val title = if (activeTab == 0) "人を探す" else "持ち物を探す"
+        val title = if (activeTab == 0) getString(R.string.people) else getString(R.string.items)
         val header =
             LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
@@ -630,15 +917,17 @@ class MainActivity : Activity(), AppleRepository.Listener {
             }
         header.addView(label(title, 28, Ui.ink, true), LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(
-            roundButton("↻", "連携情報を更新").apply {
+            roundButton("↻", getString(R.string.refresh_source)).apply {
                 elevation = 0f
                 setTextColor(Ui.blue)
+                isEnabled = !locationSync.loading
+                if (locationSync.loading) NativeMotion.spin(this)
                 setOnClickListener { locationSync.refresh() }
             },
             LinearLayout.LayoutParams(dp(44), dp(44)),
         )
         header.addView(
-            roundButton("+", "連携データを追加").apply {
+            roundButton("+", getString(R.string.add_source)).apply {
                 elevation = 0f
                 setTextColor(Ui.blue)
                 setOnClickListener { showSourceSettings() }
@@ -654,6 +943,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             )
         val entries = sharedEntries()
         if (entries.isEmpty()) {
+            val scroll = ScrollView(this).apply { isFillViewport = true }
             val empty =
                 column().apply {
                     gravity = Gravity.CENTER
@@ -666,8 +956,9 @@ class MainActivity : Activity(), AppleRepository.Listener {
             space(empty, 12)
             empty.addView(
                 label(
-                    if (locationSync.loading) "読み込んでいます…"
-                    else if (activeTab == 0) "人の位置情報を連携" else "持ち物の位置情報を連携",
+                    if (locationSync.loading) getString(R.string.loading)
+                    else if (activeTab == 0) getString(R.string.connect_people)
+                    else getString(R.string.connect_items),
                     21,
                     Ui.ink,
                     true,
@@ -676,8 +967,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
             space(empty, 10)
             empty.addView(
                 label(
-                        if (activeTab == 0) "共有済みの人の情報を、所有者が設定した連携元から表示します。"
-                        else "AirTagなどの持ち物を、対応する連携データから表示します。",
+                        if (activeTab == 0) getString(R.string.people_help)
+                        else getString(R.string.items_help),
                         14,
                         Ui.muted,
                     )
@@ -685,10 +976,13 @@ class MainActivity : Activity(), AppleRepository.Listener {
             )
             space(empty, 18)
             empty.addView(
-                actionButton("連携を設定").apply { setOnClickListener { showSourceSettings() } },
+                actionButton(getString(R.string.set_up_source)).apply {
+                    setOnClickListener { showSourceSettings() }
+                },
                 LinearLayout.LayoutParams(-1, dp(50)),
             )
-            body.addView(empty, LinearLayout.LayoutParams(-1, 0, 1f))
+            scroll.addView(empty)
+            body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
             return
         }
         if (locationSync.sourceName.isNotEmpty())
@@ -707,6 +1001,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun renderSignIn() {
+        val scroll = ScrollView(this).apply { isFillViewport = true }
         val content =
             column().apply {
                 gravity = Gravity.CENTER
@@ -714,16 +1009,20 @@ class MainActivity : Activity(), AppleRepository.Listener {
             }
         content.addView(DeviceGlyph(this, "iPhone"), LinearLayout.LayoutParams(dp(52), dp(52)))
         space(content, 10)
-        content.addView(label("Appleデバイスを探す", 22, Ui.ink, true).apply { gravity = Gravity.CENTER })
+        content.addView(
+            label(getString(R.string.find_apple_devices), 22, Ui.ink, true).apply {
+                gravity = Gravity.CENTER
+            }
+        )
         space(content, 8)
         content.addView(
-            label("Apple Accountに接続すると、\nデバイスの位置をこの地図に表示します。", 14, Ui.muted).apply {
+            label(getString(R.string.connect_help), 14, Ui.muted).apply {
                 gravity = Gravity.CENTER
             }
         )
         space(content, 16)
         content.addView(
-            actionButton("Apple Accountでサインイン").apply {
+            actionButton(getString(R.string.sign_in)).apply {
                 id = OPEN_FIND_ID
                 setOnClickListener { connect() }
             },
@@ -731,9 +1030,12 @@ class MainActivity : Activity(), AppleRepository.Listener {
         )
         space(content, 8)
         content.addView(
-            label("認証にはAppleの公式画面を使用します", 11, Ui.muted).apply { gravity = Gravity.CENTER }
+            label(getString(R.string.official_auth), 11, Ui.muted).apply {
+                gravity = Gravity.CENTER
+            }
         )
-        body.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
+        scroll.addView(content)
+        body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
     }
 
     private fun addDeviceRow(parent: LinearLayout, device: AppleDevice) {
@@ -747,13 +1049,13 @@ class MainActivity : Activity(), AppleRepository.Listener {
         row.addView(DeviceGlyph(this, device.kind), LinearLayout.LayoutParams(dp(48), dp(52)))
         val labels = column()
         labels.addView(
-            label(device.name, 17, Ui.ink, true).apply {
+            label(device.displayName(this), 17, Ui.ink, true).apply {
                 isSingleLine = true
                 ellipsize = TextUtils.TruncateAt.END
             }
         )
         labels.addView(
-            label(device.subtitle(), 12, Ui.muted).apply {
+            label(device.subtitle(this), 12, Ui.muted).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }
@@ -770,7 +1072,9 @@ class MainActivity : Activity(), AppleRepository.Listener {
             )
         tail.addView(label("›", 25, 0xffc7c7cc.toInt()))
         row.addView(tail)
-        row.contentDescription = "${device.name}、${device.status()}"
+        row.contentDescription =
+            "${device.displayName(this@MainActivity)}, ${device.statusText(this@MainActivity)}"
+        NativeMotion.press(row, .98f)
         row.setOnClickListener { select(device.id) }
         parent.addView(row, LinearLayout.LayoutParams(-1, -2))
         parent.addView(
@@ -786,30 +1090,38 @@ class MainActivity : Activity(), AppleRepository.Listener {
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(DeviceGlyph(this, device.kind), LinearLayout.LayoutParams(dp(40), dp(45)))
         header.addView(
-            label(device.name, 24, Ui.ink, true),
+            label(device.displayName(this), 24, Ui.ink, true),
             LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) },
         )
         header.addView(
-            roundButton("×", "デバイスの一覧に戻る").apply {
+            roundButton("×", getString(R.string.back_to_list)).apply {
                 elevation = 0f
                 setTextColor(Ui.muted)
                 setOnClickListener {
-                    selectedId = null
-                    renderSheet()
-                    renderMarkers()
+                    closeDetails()
                 }
             },
             LinearLayout.LayoutParams(dp(40), dp(40)),
         )
         content.addView(header)
         space(content, 9)
-        if (device.family) content.addView(label("${device.ownerName}のデバイス", 13, Ui.muted))
+        if (device.family)
+            content.addView(
+                label(
+                    getString(
+                        R.string.owner_devices,
+                        device.ownerName.ifBlank { getString(R.string.family_member) },
+                    ),
+                    13,
+                    Ui.muted,
+                )
+            )
         content.addView(label(device.model, 13, Ui.muted))
         if (device.address.isNotBlank()) content.addView(label(device.address, 15))
         space(content, 5)
         content.addView(
             label(
-                device.status() +
+                device.statusText(this@MainActivity) +
                     (if (device.battery != null) "   ▰ ${device.batteryText()}" else ""),
                 13,
                 if (device.located) Ui.green else Ui.muted,
@@ -819,27 +1131,34 @@ class MainActivity : Activity(), AppleRepository.Listener {
         val actions = LinearLayout(this)
         if (activeTab != 0)
             actions.addView(
-                actionTile("◖))", "サウンドを再生", "テスト中は無効", 0xff6052de.toInt()).apply {
-                    id = SOUND_ID
-                    isEnabled = false
-                    alpha = .5f
-                    contentDescription = "サウンドを再生、デバッグ中は無効"
-                },
+                actionTile(
+                        "◖))",
+                        getString(R.string.play_sound),
+                        getString(R.string.sound_disabled),
+                        0xff6052de.toInt(),
+                    )
+                    .apply {
+                        id = SOUND_ID
+                        isEnabled = false
+                        alpha = .5f
+                        contentDescription = getString(R.string.sound_disabled_accessibility)
+                    },
                 LinearLayout.LayoutParams(0, dp(110), 1f),
             )
         if (activeTab != 0) actions.addView(View(this), LinearLayout.LayoutParams(dp(12), 1))
         actions.addView(
-            actionTile("➤", "経路", "マップで開く", Ui.blue).apply {
-                isEnabled = device.located
-                alpha = if (device.located) 1f else .4f
-                setOnClickListener { openDirections(device) }
-            },
+            actionTile("➤", getString(R.string.directions), getString(R.string.open_maps), Ui.blue)
+                .apply {
+                    isEnabled = device.located
+                    alpha = if (device.located) 1f else .4f
+                    setOnClickListener { openDirections(device) }
+                },
             LinearLayout.LayoutParams(0, dp(110), 1f),
         )
         content.addView(actions)
         space(content, 20)
         content.addView(
-            label("位置情報を更新", 16, Ui.blue).apply {
+            label(getString(R.string.refresh_location), 16, Ui.blue).apply {
                 minHeight = dp(48)
                 gravity = Gravity.CENTER_VERTICAL
                 setOnClickListener {
@@ -854,7 +1173,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             }
         )
         val shared = sharedEntries().firstOrNull { it.id == device.id }
-        content.addView(label(shared?.source ?: "位置情報の表示に対応 · サウンドは無効", 11, Ui.muted))
+        content.addView(label(shared?.source ?: getString(R.string.location_only), 11, Ui.muted))
         body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
     }
 
@@ -870,22 +1189,27 @@ class MainActivity : Activity(), AppleRepository.Listener {
         }
 
     private fun renderAccount() {
+        val scroll = ScrollView(this)
         val content = column().apply { setPadding(dp(24), 0, dp(24), dp(20)) }
-        content.addView(label("自分", 28, Ui.ink, true))
+        content.addView(label(getString(R.string.me), 28, Ui.ink, true))
         space(content, 20)
         content.addView(
             label(
-                if (repository.hasSession) "Apple Accountに接続済み" else "Apple Accountに未接続",
+                if (repository.hasSession) getString(R.string.account_connected)
+                else getString(R.string.account_disconnected),
                 18,
                 Ui.ink,
                 true,
             )
         )
         space(content, 8)
-        content.addView(label("このAndroidを「探す」ネットワークへ登録することはできません。", 13, Ui.muted))
+        content.addView(label(getString(R.string.android_network_unavailable), 13, Ui.muted))
         space(content, 20)
         content.addView(
-            actionButton(if (repository.hasSession) "Apple Accountに再接続" else "Apple Accountでサインイン")
+            actionButton(
+                    if (repository.hasSession) getString(R.string.reconnect_account)
+                    else getString(R.string.sign_in)
+                )
                 .apply {
                     id = OPEN_FIND_ID
                     setOnClickListener { connect() }
@@ -895,50 +1219,99 @@ class MainActivity : Activity(), AppleRepository.Listener {
         space(content, 12)
         if (repository.hasSession)
             content.addView(
-                actionButton("サインアウト", false).apply { setOnClickListener { confirmLogout() } },
+                actionButton(getString(R.string.sign_out), false).apply {
+                    setOnClickListener { confirmLogout() }
+                },
                 LinearLayout.LayoutParams(-1, dp(48)),
             )
         space(content, 12)
         content.addView(
-            actionButton("外観と地図", false).apply { setOnClickListener { showMapSettings() } },
+            actionButton(getString(R.string.appearance_map), false).apply {
+                setOnClickListener { showMapSettings() }
+            },
             LinearLayout.LayoutParams(-1, dp(48)),
         )
         space(content, 10)
         content.addView(
-            actionButton("人・持ち物の連携", false).apply { setOnClickListener { showSourceSettings() } },
+            actionButton(getString(R.string.login_details), false).apply {
+                setOnClickListener { editLogin() }
+            },
+            LinearLayout.LayoutParams(-1, dp(48)),
+        )
+        if (loginVault.paused) content.addView(label(getString(R.string.auto_paused), 12, Ui.muted))
+        space(content, 10)
+        content.addView(
+            actionButton(getString(R.string.location_sources), false).apply {
+                setOnClickListener { showSourceSettings() }
+            },
             LinearLayout.LayoutParams(-1, dp(48)),
         )
         space(content, 16)
         content.addView(
-            label("Find Bridge ${BuildConfig.VERSION_NAME} · 非公式クライアント", 12, Ui.muted).apply {
+            label(getString(R.string.app_version, BuildConfig.VERSION_NAME), 12, Ui.muted).apply {
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("Find Bridge")
-                        .setMessage(
-                            "地図とデバイス画面はKotlinのネイティブUIです。Apple認証にだけ公式ページを使用します。\n\nAppleとは提携していません。地図データはOpenStreetMapです。\n\nAndroid 17 / API 37\nMapLibre Native 13.7.1\nAndroidX WebKit 1.18.0\n\n音を鳴らす・ロック・消去のAPIは実装していません。"
-                        )
-                        .setPositiveButton("閉じる", null)
+                        .setMessage(getString(R.string.about_description))
+                        .setPositiveButton(getString(R.string.close), null)
                         .show()
                 }
             }
         )
-        body.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
+        scroll.addView(content)
+        body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
     }
 
     private fun connect() {
-        startActivityForResult(Intent(this, AuthActivity::class.java), 10)
+        if (connecting) return
+        if (loginVault.hasSaved && loginVault.automatic && !loginVault.paused) {
+            connecting = true
+            loginVault.markAttempt()
+            LoginVault.clearStaged()
+            repository.logout()
+            startActivityForResult(
+                Intent(this, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
+                10,
+            )
+        } else editLogin()
+    }
+
+    private fun editLogin() {
+        if (connecting) return
+        connecting = true
+        startActivityForResult(Intent(this, LoginActivity::class.java), 10)
+    }
+
+    private fun maintainLogin() {
+        if (
+            !foreground ||
+                connecting ||
+                (!repository.requiresSignIn && repository.hasSession) ||
+                !loginVault.automaticAllowed()
+        )
+            return
+        connecting = true
+        loginVault.markAttempt()
+        LoginVault.clearStaged()
+        startActivityForResult(
+            Intent(this, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
+            10,
+        )
     }
 
     private fun accountMenu(anchor: View) {
         PopupMenu(this, anchor).apply {
             menu
-                .add(if (repository.hasSession) "Apple Accountに再接続" else "Apple Accountでサインイン")
+                .add(
+                    if (repository.hasSession) getString(R.string.reconnect_account)
+                    else getString(R.string.sign_in)
+                )
                 .setOnMenuItemClickListener {
                     connect()
                     true
                 }
             if (repository.hasSession)
-                menu.add("サインアウト").setOnMenuItemClickListener {
+                menu.add(getString(R.string.sign_out)).setOnMenuItemClickListener {
                     confirmLogout()
                     true
                 }
@@ -948,10 +1321,12 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     private fun confirmLogout() {
         AlertDialog.Builder(this)
-            .setTitle("サインアウトしますか？")
-            .setMessage("このアプリのログイン状態と取得した位置情報を削除します。Appleのデバイスは削除されません。")
-            .setNegativeButton("キャンセル", null)
-            .setPositiveButton("サインアウト") { _, _ ->
+            .setTitle(getString(R.string.confirm_sign_out))
+            .setMessage(getString(R.string.sign_out_help))
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.sign_out)) { _, _ ->
+                LoginVault.clearStaged()
+                loginVault.clear()
                 selectedId = null
                 fitted = false
                 repository.logout()
@@ -962,57 +1337,110 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private fun selected() = visibleDevices().firstOrNull { it.id == selectedId }
 
     private fun select(id: String) {
+        if (selectedId == id) return
+        listHeight = sheetHeight
         selectedId = id
         accountTab = false
-        renderSheet()
+        renderSheet(PageChange.DETAIL)
+        val detailHeight = minOf(dp(358).toFloat(), sheetStops()[1])
+        animateSheet(detailHeight)
         updateTabs()
         renderMarkers()
-        selected()
-            ?.takeIf { it.located }
-            ?.let {
-                map?.animateCamera(
-                    CameraUpdateFactory.newCameraPosition(
-                        CameraPosition.Builder()
-                            .target(LatLng(it.latitude!!, it.longitude!!))
-                            .zoom(15.0)
-                            .padding(
-                                dp(25).toDouble(),
-                                (topInset + dp(35)).toDouble(),
-                                dp(25).toDouble(),
-                                (sheetHeight + dp(64) + bottomInset + dp(30)).toDouble(),
-                            )
-                            .build()
-                    ),
-                    650,
-                )
-            }
+        selected()?.let { focusDevice(it, detailHeight) }
+    }
+
+    private fun focusDevice(device: AppleDevice, detailHeight: Float) {
+        if (!device.located) return
+        val p = currentLayout(detailHeight.toInt()).camera
+        val update =
+            CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder()
+                    .target(LatLng(device.latitude!!, device.longitude!!))
+                    .zoom(15.0)
+                    .padding(
+                        p.left.toDouble(),
+                        p.top.toDouble(),
+                        p.right.toDouble(),
+                        p.bottom.toDouble(),
+                    )
+                    .build()
+            )
+        if (NativeMotion.reduced(this)) map?.moveCamera(update) else map?.animateCamera(update, 620)
+    }
+
+    private fun closeDetails() {
+        selectedId = null
+        renderSheet(PageChange.LIST)
+        animateSheet((if (listHeight > 0) listHeight else dp(390)).toFloat())
+        renderMarkers()
+        fitted = false
+        fitDevices(force = true)
     }
 
     private fun renderMarkers() {
         val current = map ?: return
         if (current.style?.isFullyLoaded != true) return
-        current.clear()
-        markers.clear()
-        visibleDevices()
-            .filter { it.located }
-            .forEach { device ->
-                val marker =
-                    current.addMarker(
-                        MarkerOptions()
-                            .position(LatLng(device.latitude!!, device.longitude!!))
-                            .icon(
-                                IconFactory.getInstance(this)
-                                    .fromBitmap(
-                                        DeviceGlyph.marker(
-                                            this,
-                                            device.kind,
-                                            device.id == selectedId,
-                                        )
-                                    )
-                            )
-                    )
-                markers[marker] = device.id
+        val located = visibleDevices().filter { it.located }.associateBy { it.id }
+        markerById.keys
+            .filter { it !in located }
+            .forEach { id ->
+                markerById.remove(id)?.let {
+                    current.removeMarker(it)
+                    markers.remove(it)
+                }
+                markerKinds.remove(id)
             }
+        located.values.forEach { device ->
+            val kind = if (device.id == selectedId) "selected-transparent" else device.kind
+            val icon =
+                iconCache.getOrPut(kind) {
+                    IconFactory.getInstance(this)
+                        .fromBitmap(
+                            if (kind == "selected-transparent")
+                                Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+                            else DeviceGlyph.marker(this, device.kind, false)
+                        )
+                }
+            val point = LatLng(device.latitude!!, device.longitude!!)
+            val marker =
+                markerById.getOrPut(device.id) {
+                    current.addMarker(MarkerOptions().position(point).icon(icon)).also {
+                        markers[it] = device.id
+                    }
+                }
+            if (marker.position != point) marker.position = point
+            if (markerKinds[device.id] != kind) marker.icon = icon
+            markerKinds[device.id] = kind
+        }
+        val selected = selected()?.takeIf { it.located }
+        if (selected == null) {
+            selectedPin.visibility = View.INVISIBLE
+            pinId = null
+        } else {
+            if (pinId != selected.id) {
+                pinId = selected.id
+                selectedPin.setImageBitmap(DeviceGlyph.marker(this, selected.kind, true))
+                if (!NativeMotion.reduced(this)) {
+                    selectedPin.scaleX = .78f
+                    selectedPin.scaleY = .78f
+                    selectedPin.alpha = 0f
+                    NativeMotion.spring(selectedPin, DynamicAnimation.SCALE_X, 1f, 480f, .73f)
+                    NativeMotion.spring(selectedPin, DynamicAnimation.SCALE_Y, 1f, 480f, .73f)
+                    selectedPin.animate().alpha(1f).setDuration(120).start()
+                }
+            }
+            positionSelectedPin()
+        }
+    }
+
+    private fun positionSelectedPin() {
+        val device = selected()?.takeIf { it.located } ?: return
+        val current = map ?: return
+        val point =
+            current.projection.toScreenLocation(LatLng(device.latitude!!, device.longitude!!))
+        selectedPin.x = point.x - dp(33)
+        selectedPin.y = point.y - dp(74)
+        selectedPin.visibility = View.VISIBLE
     }
 
     private fun fitDevices(force: Boolean = false) {
@@ -1028,6 +1456,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         if (points.isEmpty()) return
         layoutOverlays()
         current.moveCamera(CameraUpdateFactory.paddingTo(0.0, 0.0, 0.0, 0.0))
+        val p = currentLayout().camera
         val update =
             if (points.size == 1)
                 CameraUpdateFactory.newCameraPosition(
@@ -1035,22 +1464,24 @@ class MainActivity : Activity(), AppleRepository.Listener {
                         .target(points.first())
                         .zoom(14.0)
                         .padding(
-                            dp(40).toDouble(),
-                            (topInset + dp(60)).toDouble(),
-                            dp(40).toDouble(),
-                            (sheetHeight + dp(64) + bottomInset + dp(40)).toDouble(),
+                            p.left.toDouble(),
+                            p.top.toDouble(),
+                            p.right.toDouble(),
+                            p.bottom.toDouble(),
                         )
                         .build()
                 )
             else
                 CameraUpdateFactory.newLatLngBounds(
                     LatLngBounds.Builder().includes(points).build(),
-                    dp(40),
-                    topInset + dp(60),
-                    dp(40),
-                    sheetHeight + dp(64) + bottomInset + dp(40),
+                    p.left,
+                    p.top,
+                    p.right,
+                    p.bottom,
                 )
-        current.animateCamera(update, 700)
+
+        if (NativeMotion.reduced(this)) current.moveCamera(update)
+        else current.animateCamera(update, 650)
         fitted = true
     }
 
@@ -1063,24 +1494,30 @@ class MainActivity : Activity(), AppleRepository.Listener {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, uri))
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "地図アプリをインストールすると経路を表示できます", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.install_map_app), Toast.LENGTH_LONG).show()
         }
     }
 
     override fun onChanged() {
         statusPill.text =
-            if (repository.loading || locationSync.loading) "更新中…"
-            else if (repository.hasSession || locationSync.configured) "探す" else "Find Bridge"
-        renderSheet()
+            if (repository.loading || locationSync.loading) getString(R.string.updating)
+            else if (repository.hasSession || locationSync.configured)
+                getString(R.string.find_title)
+            else "Find Bridge"
+        if (pageMotion.running) pendingRender = true else renderSheet()
         renderMarkers()
         fitDevices()
+        maintainLogin()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 10 && resultCode == RESULT_OK) {
-            fitted = false
-            repository.refresh()
+        if (requestCode == 10) {
+            connecting = false
+            if (resultCode == RESULT_OK) {
+                fitted = false
+                repository.refresh()
+            }
         }
         if (requestCode == 20 && resultCode == RESULT_OK)
             data?.data?.let { uri ->
@@ -1095,14 +1532,11 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun back() {
-        if (selectedId != null || activeTab != 1) {
-            selectedId = null
-            accountTab = false
-            activeTab = 1
-            renderSheet()
-            updateTabs()
-            renderMarkers()
-        } else finish()
+        if (panel != null) {
+            panel?.dismiss()
+            return
+        }
+        if (selectedId != null) closeDetails() else if (activeTab != 1) switchTab(1) else finish()
     }
 
     @SuppressLint("GestureBackNavigation") override fun onBackPressed() = back()
@@ -1110,10 +1544,15 @@ class MainActivity : Activity(), AppleRepository.Listener {
     override fun onStart() {
         super.onStart()
         mapView.onStart()
+        windowAdapter =
+            WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this)).also {
+                it.addWindowLayoutInfoListener(this, mainExecutor, foldListener)
+            }
     }
 
     override fun onResume() {
         super.onResume()
+        foreground = true
         mapView.onResume()
         onChanged()
         repository.refresh()
@@ -1122,12 +1561,16 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onPause() {
+        foreground = false
         handler.removeCallbacks(periodicRefresh)
+        sheetSpring?.cancel()
         mapView.onPause()
         super.onPause()
     }
 
     override fun onStop() {
+        windowAdapter?.removeWindowLayoutInfoListener(foldListener)
+        windowAdapter = null
         mapView.onStop()
         super.onStop()
     }
@@ -1135,6 +1578,9 @@ class MainActivity : Activity(), AppleRepository.Listener {
     override fun onDestroy() {
         repository.removeListener(this)
         locationSync.removeListener(this)
+        panel?.dismiss(immediate = true)
+        pageMotion.finish()
+        NativeMotion.cancelTree(root)
         glass.dispose()
         mapView.onDestroy()
         super.onDestroy()
@@ -1150,6 +1596,34 @@ class MainActivity : Activity(), AppleRepository.Listener {
         mapView.onSaveInstanceState(outState)
         outState.putString("selected", selectedId)
         outState.putInt("tab", activeTab)
+        outState.putInt("sheetHeight", sheetHeight)
+        outState.putInt("listHeight", listHeight)
+        outState.putBundle(
+            "scrollPositions",
+            Bundle().apply { scrollPositions.forEach { (key, value) -> putInt(key, value) } },
+        )
+        map?.cameraPosition?.let { position ->
+            position.target?.let { point ->
+                outState.putDoubleArray(
+                    "mapCamera",
+                    doubleArrayOf(
+                        point.latitude,
+                        point.longitude,
+                        position.zoom,
+                        position.bearing,
+                        position.tilt,
+                    ),
+                )
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        root.post {
+            layoutOverlays()
+            selected()?.let { focusDevice(it, sheetHeight.toFloat()) }
+        }
     }
 
     companion object {
@@ -1158,5 +1632,11 @@ class MainActivity : Activity(), AppleRepository.Listener {
         const val REFRESH_ID = 1004
         const val SHEET_ID = 1005
         const val SOUND_ID = 1006
+        const val SHEET_HANDLE_ID = 1007
+        const val TAB_SELECTION_ID = 1008
+        const val MAP_OPTIONS_ID = 1009
+        const val RECENTER_ID = 1010
+        const val PANEL_ID = 1011
+        const val SELECTED_PIN_ID = 1012
     }
 }

@@ -1,5 +1,6 @@
 package dev.findbridge.android
 
+import android.content.Context
 import org.json.JSONObject
 
 internal data class AppleDevice(
@@ -23,25 +24,68 @@ internal data class AppleDevice(
     val located: Boolean
         get() = latitude != null && longitude != null
 
-    fun status(now: Long = System.currentTimeMillis()): String {
+    enum class State {
+        LOCATION_OFF,
+        NO_LOCATION,
+        OFFLINE,
+        UNKNOWN_TIME,
+        NOW,
+        MINUTES,
+        HOURS,
+        DAYS,
+    }
+
+    fun status(now: Long = System.currentTimeMillis()): Pair<State, Long> {
         if (!located)
-            return when {
-                !locationEnabled -> "位置情報がオフ"
-                online -> "位置情報が見つかりません"
-                else -> "オフライン"
-            }
-        if (timestamp <= 0) return "更新時刻不明"
+            return (when {
+                !locationEnabled -> State.LOCATION_OFF
+                online -> State.NO_LOCATION
+                else -> State.OFFLINE
+            }) to 0L
+        if (timestamp <= 0) return State.UNKNOWN_TIME to 0L
         val minutes = ((now - timestamp) / 60_000).coerceAtLeast(0)
         return when {
-            minutes < 2 -> "たった今"
-            minutes < 60 -> "${minutes}分前"
-            minutes < 1440 -> "${minutes / 60}時間前"
-            else -> "${minutes / 1440}日前"
+            minutes < 2 -> State.NOW to 0L
+            minutes < 60 -> State.MINUTES to minutes
+            minutes < 1440 -> State.HOURS to minutes / 60
+            else -> State.DAYS to minutes / 1440
         }
     }
 
-    fun subtitle(): String = address.ifBlank {
-        if (located) "位置情報を取得済み · ${status()}" else status()
+    fun statusText(context: Context, now: Long = System.currentTimeMillis()): String {
+        val (state, count) = status(now)
+        val plural =
+            when (state) {
+                State.MINUTES -> R.plurals.minutes_ago
+                State.HOURS -> R.plurals.hours_ago
+                State.DAYS -> R.plurals.days_ago
+                else -> 0
+            }
+        if (plural != 0) {
+            val amount = count.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            return context.resources.getQuantityString(plural, amount, amount)
+        }
+        return context.getString(
+            when (state) {
+                State.LOCATION_OFF -> R.string.location_off
+                State.NO_LOCATION -> R.string.no_location
+                State.OFFLINE -> R.string.offline
+                State.UNKNOWN_TIME -> R.string.unknown_time
+                else -> R.string.just_now
+            }
+        )
+    }
+
+    fun displayName(context: Context) = name.ifBlank {
+        context.getString(
+            if (kind == "Person") R.string.unnamed
+            else if ("tag" in kind.lowercase()) R.string.items else R.string.devices
+        )
+    }
+
+    fun subtitle(context: Context): String = address.ifBlank {
+        if (located) context.getString(R.string.located_status, statusText(context))
+        else statusText(context)
     }
 
     fun batteryText(): String =
@@ -70,7 +114,7 @@ internal data class AppleDevice(
             val owner = members[ownerId]
             return AppleDevice(
                 id = json.optString("id"),
-                name = json.optString("name", "デバイス"),
+                name = json.optString("name"),
                 model = json.optString("deviceDisplayName", json.optString("rawDeviceModel")),
                 kind = json.optString("deviceClass", "iPhone"),
                 family = owner != null,

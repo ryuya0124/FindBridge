@@ -11,7 +11,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import org.json.JSONObject
 
-/** Passwords are never stored. Session material is protected by Android Keystore AES-GCM. */
+/** Each namespace has an independent, non-exportable Android Keystore AES-GCM key. */
 internal class SecureSessionStore(context: Context, namespace: String = "apple_session") {
     private val prefs =
         context.applicationContext.getSharedPreferences(namespace, Context.MODE_PRIVATE)
@@ -30,6 +30,7 @@ internal class SecureSessionStore(context: Context, namespace: String = "apple_s
                             KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
                         )
                         .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setKeySize(256)
                         .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                         .build()
                 )

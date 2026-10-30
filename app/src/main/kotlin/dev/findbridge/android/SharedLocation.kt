@@ -2,9 +2,9 @@ package dev.findbridge.android
 
 import org.json.JSONObject
 
-internal enum class LocationCategory(val title: String) {
-    PEOPLE("人を探す"),
-    ITEMS("持ち物を探す"),
+internal enum class LocationCategory {
+    PEOPLE,
+    ITEMS,
 }
 
 internal data class SharedLocation(
@@ -70,7 +70,7 @@ internal data class SharedLocation(
                 else rawTime.toLong()
             return SharedLocation(
                 id,
-                json.optString("name", if (category == LocationCategory.PEOPLE) "名前未設定" else "持ち物"),
+                json.optString("name"),
                 category,
                 json.optString(
                     "kind",

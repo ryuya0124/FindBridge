@@ -48,7 +48,7 @@ class NativeSessionLiveTest {
                 mapView.getMapAsync { map ->
                     activity.window.decorView.postDelayed(
                         {
-                            val sheetTop = activity.findViewById<View>(MainActivity.SHEET_ID).top
+                            val sheet = activity.findViewById<View>(MainActivity.SHEET_ID)
                             cameraContainsDevices =
                                 repository.devices
                                     .filter { it.located && !it.family }
@@ -61,7 +61,11 @@ class NativeSessionLiveTest {
                                                 )
                                             )
                                         screen.x in 0f..mapView.width.toFloat() &&
-                                            screen.y in 0f..sheetTop.toFloat()
+                                            screen.y in 0f..mapView.height.toFloat() &&
+                                            !(screen.x >= sheet.left &&
+                                                screen.x <= sheet.right &&
+                                                screen.y >= sheet.top &&
+                                                screen.y <= sheet.bottom)
                                     }
                             cameraReady.countDown()
                         },

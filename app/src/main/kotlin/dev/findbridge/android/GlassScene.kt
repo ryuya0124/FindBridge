@@ -43,7 +43,9 @@ internal class GlassScene(private val mapView: View) {
 
     fun capture(map: MapLibreMap, immediate: Boolean = false) {
         if (disposed || pending || width == 0 || height == 0) return
-        if (!immediate && SystemClock.uptimeMillis() - lastSnapshot < 140) return
+        // Snapshot completion can itself trigger MapLibre's idle callback. Always bound the
+        // capture rate so a still map cannot create a snapshot/blur/render feedback loop.
+        if (SystemClock.uptimeMillis() - lastSnapshot < if (immediate) 100 else 140) return
         pending = true
         lastSnapshot = SystemClock.uptimeMillis()
         map.snapshot { snapshot ->

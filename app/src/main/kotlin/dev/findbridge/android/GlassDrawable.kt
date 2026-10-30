@@ -10,8 +10,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RectF
-import android.graphics.RenderEffect
-import android.graphics.RenderNode
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
@@ -29,6 +27,11 @@ internal class GlassDrawable(
     private val rect = RectF()
     private val renderer = if (android.os.Build.VERSION.SDK_INT >= 33) GlassShader33() else null
     private var drawableAlpha = 255
+    var contact = 0f
+        set(value) {
+            field = value
+            invalidateSelf()
+        }
 
     init {
         scene.register(this)
@@ -54,6 +57,7 @@ internal class GlassDrawable(
                 radius,
                 material,
                 drawableAlpha,
+                contact,
             )
         } else {
             canvas.save()
@@ -77,6 +81,10 @@ internal class GlassDrawable(
             }
             paint.color = if (Ui.dark) 0xe82b2b31.toInt() else 0xe8fafafd.toInt()
             canvas.drawRoundRect(rect, radius, radius, paint)
+            if (contact > 0f) {
+                paint.color = android.graphics.Color.argb((contact * 26).toInt(), 255, 255, 255)
+                canvas.drawRoundRect(rect, radius, radius, paint)
+            }
             canvas.restore()
         }
     }
@@ -110,6 +118,7 @@ private class GlassShader33 {
             uniform float material;
             uniform float dark;
             uniform float strength;
+            uniform float contact;
             half4 main(float2 p) {
                 float2 halfSize=panelSize*0.5;
                 float2 q=p-halfSize;
@@ -120,7 +129,7 @@ private class GlassShader33 {
                 if(alpha<0.001) return half4(0.0);
                 float2 n=q/max(length(q),0.001);
                 float edge=1.0-smoothstep(0.0,26.0,-distance);
-                float2 samplePoint=(p+origin+n*edge*edge*(5.0+strength*9.0))*sceneScale;
+                float2 samplePoint=(p+origin+n*edge*edge*(5.0+strength*9.0+contact*8.0))*sceneScale;
                 half4 c=scene.eval(samplePoint);
                 float3 rgb=float3(c.rgb);
                 float luminance=dot(rgb,float3(0.2126,0.7152,0.0722));
@@ -131,13 +140,13 @@ private class GlassShader33 {
                 float shine=exp(-pow((distance+1.3)/1.35,2.0));
                 rgb+=shine*(0.12+0.18*max(-n.y,0.0))*(0.5+strength*0.5);
                 rgb+=edge*0.025*max(-n.y,0.0);
+                rgb+=contact*(0.045+edge*0.07);
                 return half4(clamp(rgb,0.0,1.0)*alpha,alpha);
             }
             """
                 .trimIndent()
         )
     private var previous: Bitmap? = null
-    private val blurNode = RenderNode("FindBridgeGlass")
     private val clip = Path()
     private var lastBlur = -1f
 
@@ -151,6 +160,7 @@ private class GlassShader33 {
         radius: Float,
         material: Float,
         alpha: Int,
+        contact: Float,
     ) {
         if (previous !== bitmap) {
             shader.setInputShader(
@@ -166,25 +176,17 @@ private class GlassShader33 {
         shader.setFloatUniform("material", material)
         shader.setFloatUniform("dark", if (Ui.dark) 1f else 0f)
         shader.setFloatUniform("strength", scene.intensity)
+        shader.setFloatUniform("contact", contact)
         paint.shader = shader
         paint.alpha = alpha
         paint.color = Color.WHITE
-        blurNode.setPosition(0, 0, bounds.width().toInt(), bounds.height().toInt())
-        val blurRadius = 10f + material * 18f
-        if (lastBlur != blurRadius) {
-            blurNode.setRenderEffect(
-                RenderEffect.createBlurEffect(blurRadius, blurRadius, Shader.TileMode.CLAMP)
-            )
-            lastBlur = blurRadius
-        }
-        val recording = blurNode.beginRecording()
-        recording.drawRect(bounds, paint)
-        blurNode.endRecording()
         canvas.save()
         clip.reset()
         clip.addRoundRect(bounds, radius, radius, Path.Direction.CW)
         canvas.clipPath(clip)
-        canvas.drawRenderNode(blurNode)
+        // The map texture is already blurred on the worker. Blurring the finished
+        // lens again softens its boundary and adds an offscreen pass for every control.
+        canvas.drawRect(bounds, paint)
         canvas.restore()
         paint.shader = null
         paint.style = Paint.Style.STROKE

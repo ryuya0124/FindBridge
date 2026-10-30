@@ -23,14 +23,14 @@ class AppleDeviceTest {
 
     @Test
     fun unknownLocationDoesNotClaimLiveCoordinates() {
-        assertEquals("位置情報が見つかりません", device(false).status())
-        assertEquals("オフライン", device(false, online = false).status())
+        assertEquals(AppleDevice.State.NO_LOCATION to 0L, device(false).status())
+        assertEquals(AppleDevice.State.OFFLINE to 0L, device(false, online = false).status())
     }
 
     @Test
     fun staleLocationsRetainTheirActualAge() {
-        assertEquals("たった今", device(true).status(600_000))
-        assertEquals("5分前", device(true).status(900_000))
-        assertEquals("2時間前", device(true).status(7_800_000))
+        assertEquals(AppleDevice.State.NOW to 0L, device(true).status(600_000))
+        assertEquals(AppleDevice.State.MINUTES to 5L, device(true).status(900_000))
+        assertEquals(AppleDevice.State.HOURS to 2L, device(true).status(7_800_000))
     }
 }

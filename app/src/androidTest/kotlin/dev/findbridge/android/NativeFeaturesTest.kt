@@ -35,7 +35,7 @@ class NativeFeaturesTest {
             )
         assertTrue(device.family)
         assertEquals("Fixture Member", device.ownerName)
-        assertEquals("位置情報がオフ", device.status())
+        assertEquals(AppleDevice.State.LOCATION_OFF to 0L, device.status())
         assertFalse(device.located)
         assertFalse(AppleDevice.fromJson(JSONObject("""{"id":"own","fmlyShare":true}""")).family)
     }
@@ -82,14 +82,14 @@ class NativeFeaturesTest {
                         find(activity.window.decorView) {
                             it is TextView && it.text.toString() == name
                         }
-                    tab("人を探す")
+                    tab(activity.getString(R.string.people))
                     assertNotNull(label("Fixture Person"))
                     (label("Fixture Person")!!.parent.parent as View).performClick()
                     assertNull(activity.findViewById<View>(MainActivity.SOUND_ID))
-                    tab("持ち物")
+                    tab(activity.getString(R.string.items))
                     assertNotNull(label("Fixture AirTag"))
                     assertNull(label("Fixture Apple Pencil Pro"))
-                    tab("デバイス")
+                    tab(activity.getString(R.string.devices))
                     assertNotNull(label("Fixture Apple Pencil Pro"))
                 }
             }

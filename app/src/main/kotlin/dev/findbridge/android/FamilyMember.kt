@@ -15,7 +15,7 @@ internal data class FamilyMember(val id: String, val name: String) {
                         listOf(member.optString("firstName"), member.optString("lastName"))
                             .filter { it.isNotBlank() }
                             .joinToString(" ")
-                            .ifBlank { member.optString("displayName", "ファミリーメンバー") }
+                            .ifBlank { member.optString("displayName") }
                     FamilyMember(id, name)
                 }
                 .toList()

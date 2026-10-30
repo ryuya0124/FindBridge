@@ -19,6 +19,7 @@ import org.json.JSONObject
 
 /** Optional owner-configured data source. Only a pinned HTTPS snapshot GET is supported. */
 internal class LocationSyncRepository private constructor(context: Context) {
+    private val application = context.applicationContext as android.app.Application
     private val resolver = context.applicationContext.contentResolver
     private val store = SecureSessionStore(context, "location_source")
     private val executor = Executors.newSingleThreadExecutor()
@@ -38,8 +39,10 @@ internal class LocationSyncRepository private constructor(context: Context) {
     var loading = false
         private set
 
-    var error = ""
-        private set
+    private var errorRes = 0
+    private var remoteError = ""
+    val error
+        get() = if (errorRes == 0) remoteError else AppLanguage.text(application, errorRes)
 
     var sourceName = ""
         private set
@@ -100,7 +103,7 @@ internal class LocationSyncRepository private constructor(context: Context) {
                     main.post {
                         if (generation != requestGeneration) return@post
                         loading = false
-                        error = "連携データを読み込めませんでした。対応する接続ファイルまたは位置データを選択してください。"
+                        errorRes = R.string.source_import_failed
                         changed()
                     }
                 }
@@ -165,7 +168,7 @@ internal class LocationSyncRepository private constructor(context: Context) {
                     main.post {
                         if (generation != requestGeneration) return@post
                         loading = false
-                        error = "連携元を読み取れませんでした。選択したファイルまたは接続設定を確認してください。"
+                        errorRes = R.string.source_read_failed
                         changed()
                     }
                 }
@@ -237,7 +240,7 @@ internal class LocationSyncRepository private constructor(context: Context) {
                 json.optJSONArray("items") != null ||
                 json.optJSONArray("devices") != null
         )
-        sourceName = json.optString("source", "連携データ")
+        sourceName = json.optString("source", AppLanguage.text(application, R.string.source_data))
         fun entries(key: String, category: LocationCategory): List<SharedLocation> {
             val array = json.optJSONArray(key) ?: return emptyList()
             return (0 until array.length()).mapNotNull {
@@ -253,7 +256,8 @@ internal class LocationSyncRepository private constructor(context: Context) {
                 .filter { it.pencil }
                 .distinctBy { it.id }
         items = allItems.filterNot { it.pencil }
-        error = json.optString("message")
+        errorRes = 0
+        remoteError = json.optString("message")
         changed()
     }
 
@@ -264,7 +268,8 @@ internal class LocationSyncRepository private constructor(context: Context) {
         people = emptyList()
         items = emptyList()
         pencils = emptyList()
-        error = ""
+        errorRes = 0
+        remoteError = ""
         sourceName = ""
         executor.execute { store.clear() }
         changed()
