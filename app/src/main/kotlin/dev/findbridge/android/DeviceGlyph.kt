@@ -82,6 +82,38 @@ constructor(context: Context, private val kind: String = "iPhone") : View(contex
         private fun drawDevice(c: Canvas, p: Paint, kind: String) {
             val type = kind.lowercase(Locale.ROOT)
             when {
+                "person" in type -> {
+                    p.color = 0xffd3d8df.toInt()
+                    c.drawCircle(32f, 32f, 30f, p)
+                    p.color = 0xff8b95a6.toInt()
+                    c.drawCircle(32f, 23f, 10f, p)
+                    c.drawRoundRect(13f, 37f, 51f, 57f, 15f, 15f, p)
+                }
+                "pencil" in type -> {
+                    c.save()
+                    c.rotate(30f, 32f, 32f)
+                    round(c, p, 0xffc2c4ca.toInt(), 27f, 3f, 37f, 51f, 4f)
+                    round(c, p, Color.WHITE, 28f, 3f, 36f, 50f, 3f)
+                    p.color = 0xffa9abb3.toInt()
+                    c.drawPath(
+                        Path().apply {
+                            moveTo(28f, 50f)
+                            lineTo(32f, 62f)
+                            lineTo(36f, 50f)
+                            close()
+                        },
+                        p,
+                    )
+                    c.restore()
+                }
+                "tag" in type -> {
+                    p.color = 0xffc4c6cb.toInt()
+                    c.drawCircle(32f, 32f, 26f, p)
+                    p.color = Color.WHITE
+                    c.drawCircle(32f, 31f, 23f, p)
+                    p.color = 0xffe3e4e8.toInt()
+                    c.drawCircle(32f, 31f, 15f, p)
+                }
                 "watch" in type -> {
                     round(c, p, 0xffc8c6bc.toInt(), 24f, 0f, 42f, 64f, 8f)
                     round(c, p, 0xffa9a69e.toInt(), 15f, 14f, 50f, 51f, 11f)

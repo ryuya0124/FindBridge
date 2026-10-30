@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
 }
@@ -11,13 +13,44 @@ android {
         applicationId = "dev.findbridge.android"
         minSdk = 28
         targetSdk = 37
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "3.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
+    }
+
+    val signingFile =
+        providers.environmentVariable("FINDBRIDGE_SIGNING_PROPERTIES").orNull?.let(::file)
+    if (signingFile?.isFile == true) {
+        val signing = Properties().apply { signingFile.inputStream().use(::load) }
+        signingConfigs.create("privateRelease") {
+            storeFile = file(signing.getProperty("storeFile"))
+            storePassword = signing.getProperty("storePassword")
+            keyAlias = signing.getProperty("keyAlias")
+            keyPassword = signing.getProperty("keyPassword")
+        }
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = signingConfigs.findByName("privateRelease")
+        }
     }
 
     buildFeatures {
         buildConfig = true
+    }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     compileOptions {
@@ -27,6 +60,8 @@ android {
 
     lint {
         abortOnError = true
+        // The compact APK intentionally targets arm64 phones and arm64 emulators.
+        disable += "ChromeOsAbiSupport"
     }
 }
 

@@ -12,9 +12,12 @@ import javax.crypto.spec.GCMParameterSpec
 import org.json.JSONObject
 
 /** Passwords are never stored. Session material is protected by Android Keystore AES-GCM. */
-internal class SecureSessionStore(context: Context) {
+internal class SecureSessionStore(context: Context, namespace: String = "apple_session") {
     private val prefs =
-        context.applicationContext.getSharedPreferences("apple_session", Context.MODE_PRIVATE)
+        context.applicationContext.getSharedPreferences(namespace, Context.MODE_PRIVATE)
+    private val alias =
+        if (namespace == "apple_session") "findbridge.apple.session.v2"
+        else "findbridge.$namespace.v1"
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -72,9 +75,5 @@ internal class SecureSessionStore(context: Context) {
     @Synchronized
     fun clear() {
         prefs.edit().clear().commit()
-    }
-
-    companion object {
-        private const val alias = "findbridge.apple.session.v2"
     }
 }

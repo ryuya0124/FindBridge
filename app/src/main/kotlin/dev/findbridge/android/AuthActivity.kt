@@ -2,7 +2,6 @@ package dev.findbridge.android
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.graphics.Color
 import android.net.http.SslError
 import android.os.Bundle
 import android.view.Gravity
@@ -40,8 +39,10 @@ class AuthActivity : Activity() {
     private var captured = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Ui.configure(this)
+        if (Ui.dark) setTheme(R.style.Theme_FindBridge_Dark)
         super.onCreate(savedInstanceState)
-        val root = column().apply { setBackgroundColor(Color.WHITE) }
+        val root = column().apply { setBackgroundColor(Ui.surface) }
         root.setOnApplyWindowInsetsListener { view, insets ->
             if (android.os.Build.VERSION.SDK_INT >= 30) {
                 val bars =

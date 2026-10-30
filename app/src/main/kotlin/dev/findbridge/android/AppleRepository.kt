@@ -26,6 +26,9 @@ internal class AppleRepository private constructor(context: Context) {
     var devices: List<AppleDevice> = emptyList()
         private set
 
+    var familyMembers: List<FamilyMember> = emptyList()
+        private set
+
     var loading = false
         private set
 
@@ -63,7 +66,7 @@ internal class AppleRepository private constructor(context: Context) {
                 require(response.optJSONArray("content") != null)
                 val originalBody = JSONObject(message.optString("body", "{}"))
                 val client = originalBody.optJSONObject("clientContext") ?: JSONObject()
-                client.put("shouldLocate", true).put("selectedDevice", "all").put("fmly", false)
+                client.put("shouldLocate", true).put("selectedDevice", "all").put("fmly", true)
                 val body = JSONObject().put("clientContext", client)
                 response.optJSONObject("serverContext")?.let { body.put("serverContext", it) }
                 val refreshUrl = url.replace("/initClient", "/refreshClient")
@@ -86,12 +89,15 @@ internal class AppleRepository private constructor(context: Context) {
 
     private fun applyResponse(response: JSONObject) {
         val content = response.optJSONArray("content") ?: return
+        familyMembers = FamilyMember.fromUserInfo(response.optJSONObject("userInfo"))
+        val owners = familyMembers.associateBy { it.id }
+
         devices =
             (0 until content.length()).mapNotNull { index ->
                 content
                     .optJSONObject(index)
                     ?.takeIf { it.optString("id").isNotEmpty() }
-                    ?.let(AppleDevice::fromJson)
+                    ?.let { AppleDevice.fromJson(it, owners) }
             }
         updatedAt = System.currentTimeMillis()
         error = ""
@@ -102,6 +108,7 @@ internal class AppleRepository private constructor(context: Context) {
         val current = session ?: return
         if (loading) return
         val snapshot = JSONObject(current.toString())
+        snapshot.getJSONObject("body").getJSONObject("clientContext").put("fmly", true)
         val requestGeneration = generation
         loading = true
         changed()
@@ -186,6 +193,7 @@ internal class AppleRepository private constructor(context: Context) {
         generation++
         session = null
         devices = emptyList()
+        familyMembers = emptyList()
         loading = false
         error = ""
         nativeTransportVerified = false

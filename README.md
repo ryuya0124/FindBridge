@@ -1,83 +1,51 @@
 # Find Bridge
 
-Appleの「探す」に近い操作感で、Androidから自分のAppleデバイスの位置を確認する非公式アプリです。地図、デバイス一覧、詳細カード、タブはネイティブUIです。Apple Accountへの接続時だけApple公式の認証ページを使用し、認証が済むとネイティブ画面に戻ります。
+AndroidからAppleデバイスの位置を確認する非公式アプリです。地図・一覧・詳細・タブはKotlinのネイティブUIで、Apple Accountへの接続時だけApple公式の認証ページを開きます。
 
-## 実装している機能
+## インストール
 
-- ネイティブ地図の移動、拡大縮小、デバイスマーカー、全デバイスを表示するカメラ調整
-- ドラッグして高さを変えられるデバイス一覧と、タップで開く詳細カード
-- Appleから取得した位置、最終更新時刻、オンライン状態、取得可能な場合のバッテリー表示
-- 更新ボタンと、アプリ表示中の30秒ごとの位置情報更新
-- Android Keystoreで暗号化したセッションの保存、アプリ再起動後の更新、サインアウト
-- 日本語の画面、元の更新時刻を保った古い位置情報の表示、通信エラー時の再試行
+[非公開GitHubのリリース](https://github.com/ryuya0124/FindBridge/releases/latest)から `FindBridge-3.0.0-arm64-release.apk` をダウンロードしてインストールしてください。リポジトリへのアクセス権が必要です。
 
-**サウンド再生は無効です。** 音を鳴らすAPI、紛失モード、ロック、消去、デバイス削除のAPIは実装していません。認証用WebViewでも、Find Devicesの読み取り用エンドポイント以外へのリクエストを拒否します。
+- Android 9以降のarm64端末に対応。Android 17 / API 37を対象にしています。
+- 3.0.0から専用のリリース鍵で署名しています。以前のdebug版を使っている場合は、一度アンインストールしてから入れ直してください。Apple Accountへの再接続が必要です。
+- 今後の同じ鍵によるリリース版は、データを保ったまま更新できます。
 
-AirTag一覧、人の位置共有、Android自体のFind Myネットワークへの登録には対応しません。下部の「人を探す」「持ち物」は対応範囲の説明を表示します。地図はApple Mapsではなく、OpenStreetMapのデータを使ったMapLibre Nativeです。
+## 使い方
 
-## 技術構成
+1. 「デバイス」からApple Accountに接続します。
+2. 一覧のデバイスをタップすると、地図と詳細を確認できます。家族の情報が返るアカウントでは、メンバーごとに表示します。
+3. 一覧の上端をドラッグすると高さを変更できます。右上の照準ボタンで、位置のあるデバイスを地図に収めます。
+4. 地図右上の設定から「標準」「航空写真」「航空写真＋地名」を切り替えられます。「自分」→「外観と地図」からも設定できます。
+5. 外観はシステム連動・ライト・ダークに対応。ガラスの透明感も調整できます。
 
-2026-10-30にレジストリで確認した安定版を固定しています。
+表示中は30秒ごとに更新します。古い位置は元の取得時刻を表示し、位置が取得できないデバイスに架空の座標を割り当てることはありません。Appleのセッションが切れたら「自分」から再接続してください。
 
-| 項目 | バージョン |
+## 対応範囲
+
+| 機能 | 現在の状態 |
 | --- | --- |
-| アプリ、テスト、ビルド定義 | Kotlin / Kotlin DSL |
-| compileSdk / targetSdk | Android 17 / API 37 |
-| minSdk | Android 9 / API 28 |
-| Kotlin | 2.4.21 |
-| Android Gradle Plugin | 9.5.0 |
-| Gradle | 9.8.2 |
-| Android Build Tools | 37.0.0 |
-| MapLibre Native Android | 13.7.1 |
-| AndroidX WebKit | 1.18.0 |
-| AndroidX Test Runner / Core | 1.7.0 |
-| AndroidX Test JUnit | 1.3.0 |
+| iPhone・iPad・Macなど | Appleのデバイス用サービスから取得。実アカウントで確認済み |
+| 家族のデバイス | Appleが返すメンバー情報と所有者を照合して表示。公開される位置・状態の範囲に依存 |
+| ダークモード・航空写真・ガラスUI | 対応 |
+| 人・AirTagなどの持ち物 | ネイティブ一覧・詳細・地図と、追加連携データの読み込みに対応。Appleからの自動取得は未対応 |
+| Apple Pencil Pro | 追加連携元がPencilのデータを返した場合に「デバイス」へ表示。実機データでの取得は未確認 |
+| 音・紛失モード・ロック・消去 | 操作しません。サウンドは無効 |
+| このAndroidをFind Myネットワークへ登録 | 未対応 |
 
-アプリのUIとデータ処理はKotlinです。`apple-session.js` は認証ページ内の読み取り用応答をKotlin側へ渡す小さなアダプターです。パスワードや確認コードは読み取りません。
+「人を探す」「持ち物」では、所有者が選んだ対応形式の位置データファイルを読み込めます。Apple Accountへのログインだけでこれらが自動取得される機能は、まだ実装できていません。対応する連携サーバー向けの接続ファイルにも対応しますが、サーバーやMacの常駐ソフトは同梱していません。形式は開発者向け資料に記載しています。
 
-接続時にAppleの `initClient` / `refreshClient` 応答からデバイス情報とセッションを受け取り、その後の更新はKotlinのHTTPクライアントからAppleへ直接送信します。許可されたAppleのホストと読み取り用の2パスに限定しています。認証用WebViewは接続完了時に破棄します。
+Apple Pencil ProはiPadだけでなく、iPhoneの「探す」でも探せるとAppleが案内しています。このアプリで近距離探索を再現する機能はありません。[Appleの説明](https://support.apple.com/en-gb/guide/ipad/ipad445ff36d/ipados)
 
-Appleの非公開Webサービスを利用するため、Apple側の変更やセッション期限切れでは再接続が必要になる場合があります。パスワードを保存して自動的に再ログインする処理はありません。
-
-## ビルド
-
-JDK 21とAndroid SDKを用意してください。
-
-```bash
-export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home'
-export ANDROID_HOME="$HOME/Library/Android/sdk"
-sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
-./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest
-```
-
-APK: `app/build/outputs/apk/debug/app-debug.apk`
-
-```bash
-adb -s emulator-5556 install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s emulator-5556 shell am start -n dev.findbridge.android/.MainActivity
-```
-
-GitHub Actionsも同じビルド・Lint・単体テストを実行します。開発用APKは非公開GitHub Releaseに保存しています。リポジトリは非公開です。ストア配信用署名は含みません。
-
-## 検証
-
-[検証記録](VERIFICATION.md) を参照してください。認証情報の不要なテストは次で実行できます。
-
-```bash
-./gradlew :app:testDebugUnitTest :app:connectedDebugAndroidTest
-```
-
-既に認証済みのエミュレータで、保存セッションからのネイティブ通信とサウンド無効を検証する場合:
-
-```bash
-adb -s emulator-5556 shell am instrument -w \
-  -e live true \
-  -e class dev.findbridge.android.NativeSessionLiveTest \
-  dev.findbridge.android.test/androidx.test.runner.AndroidJUnitRunner
-```
+地図はMapLibreとOpenStreetMap、航空写真は国土地理院の地理院タイルを使用します。国内の高解像度写真と、国外を含む低倍率の衛星画像で提供範囲が異なります。Apple Mapsではありません。[写真の提供範囲と出典](https://maps.gsi.go.jp/development/ichiran.html)
 
 ## データの扱い
 
-独自サーバー、広告、解析SDKはありません。パスワード・確認コードはソースや設定に保存しません。セッションはAndroid KeystoreのAES-GCMで暗号化し、アプリのバックアップと端末間転送は無効にしています。デバイス位置はアプリのメモリ内に保持し、検証記録・スクリーンショット・GitHubには含めません。
+広告・解析SDK・アプリ独自の中継サーバーはありません。Apple Accountのパスワードや確認コードをアプリに保存しません。認証済みセッションと追加連携の接続情報は、Android Keystoreで暗号化して保存します。バックアップと端末間転送は無効です。
 
-Appleとは提携していません。地図と依存ライブラリの出典は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) に記載しています。
+位置情報とガラス描画用の地図画像はメモリ内で扱います。追加連携で選択したファイルの管理は、そのファイルの所有者が行ってください。地図の表示範囲は地図提供元へ、Appleの更新要求はAppleへ送信されます。
+
+Appleとは提携していません。Apple側のサービス変更によって使えなくなる場合があります。
+
+- [開発者向けREADME](docs/DEVELOPMENT.md)
+- [検証記録](VERIFICATION.md)
+- [ライセンスと地図の出典](THIRD_PARTY_NOTICES.md)

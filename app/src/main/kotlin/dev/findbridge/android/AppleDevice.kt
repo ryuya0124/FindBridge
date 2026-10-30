@@ -16,12 +16,21 @@ internal data class AppleDevice(
     val battery: Double?,
     val charging: Boolean,
     val address: String,
+    val ownerId: String = "",
+    val ownerName: String = "",
+    val locationEnabled: Boolean = true,
 ) {
     val located: Boolean
         get() = latitude != null && longitude != null
 
     fun status(now: Long = System.currentTimeMillis()): String {
-        if (!located) return if (online) "位置情報が見つかりません" else "オフライン"
+        if (!located)
+            return when {
+                !locationEnabled -> "位置情報がオフ"
+                online -> "位置情報が見つかりません"
+                else -> "オフライン"
+            }
+        if (timestamp <= 0) return "更新時刻不明"
         val minutes = ((now - timestamp) / 60_000).coerceAtLeast(0)
         return when {
             minutes < 2 -> "たった今"
@@ -43,7 +52,10 @@ internal data class AppleDevice(
             .orEmpty()
 
     companion object {
-        fun fromJson(json: JSONObject): AppleDevice {
+        fun fromJson(
+            json: JSONObject,
+            members: Map<String, FamilyMember> = emptyMap(),
+        ): AppleDevice {
             val location = json.optJSONObject("location")
             val lat =
                 location?.optDouble("latitude", Double.NaN)?.takeIf {
@@ -54,12 +66,14 @@ internal data class AppleDevice(
                     it.isFinite() && it in -180.0..180.0
                 }
             val address = json.optJSONObject("address") ?: location?.optJSONObject("address")
+            val ownerId = json.optString("prsId")
+            val owner = members[ownerId]
             return AppleDevice(
                 id = json.optString("id"),
                 name = json.optString("name", "デバイス"),
                 model = json.optString("deviceDisplayName", json.optString("rawDeviceModel")),
                 kind = json.optString("deviceClass", "iPhone"),
-                family = json.optBoolean("fmlyShare", false),
+                family = owner != null,
                 latitude = if (lat != null && lon != null) lat else null,
                 longitude = if (lat != null && lon != null) lon else null,
                 accuracy = location?.optDouble("horizontalAccuracy", 0.0) ?: 0.0,
@@ -77,6 +91,9 @@ internal data class AppleDevice(
                             address.optString("streetAddress", address.optString("city")),
                         )
                         .orEmpty(),
+                ownerId = ownerId,
+                ownerName = owner?.name.orEmpty(),
+                locationEnabled = json.optBoolean("locationEnabled", true),
             )
         }
     }

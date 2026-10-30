@@ -5,6 +5,8 @@ local.properties
 *.iml
 *.jks
 *.keystore
+*-signing.properties
+signing.properties
 artifacts/
 research/
 .DS_Store

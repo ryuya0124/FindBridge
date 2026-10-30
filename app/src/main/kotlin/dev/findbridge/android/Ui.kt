@@ -12,12 +12,33 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 internal object Ui {
-    const val background = 0xfff2f2f7.toInt()
-    const val ink = 0xff1c1c1e.toInt()
-    const val muted = 0xff8e8e93.toInt()
-    const val green = 0xff28b14e.toInt()
-    const val blue = 0xff007aff.toInt()
-    const val surface = 0xfffbfbfd.toInt()
+    var dark = false
+        private set
+
+    fun configure(context: android.content.Context) {
+        dark = AppearanceSettings(context).isDark(context)
+    }
+
+    val background
+        get() = if (dark) 0xff000000.toInt() else 0xfff2f2f7.toInt()
+
+    val ink
+        get() = if (dark) 0xfff5f5f7.toInt() else 0xff1c1c1e.toInt()
+
+    val muted
+        get() = if (dark) 0xffa0a0a8.toInt() else 0xff75757e.toInt()
+
+    val green
+        get() = if (dark) 0xff32d74b.toInt() else 0xff28b14e.toInt()
+
+    val blue
+        get() = if (dark) 0xff0a84ff.toInt() else 0xff007aff.toInt()
+
+    val surface
+        get() = if (dark) 0xff1c1c1e.toInt() else 0xfffbfbfd.toInt()
+
+    val separator
+        get() = if (dark) 0x3b9a9aa3 else 0x29777780
 
     fun Activity.dp(value: Float): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
 
@@ -54,7 +75,8 @@ internal object Ui {
             isAllCaps = false
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(if (primary) Color.WHITE else blue)
-            background = ripple(if (primary) green else Color.WHITE, dp(16))
+            backgroundTintList = null
+            background = ripple(if (primary) green else surface, dp(18))
             setPadding(dp(14), dp(8), dp(14), dp(8))
             minHeight = dp(48)
         }
