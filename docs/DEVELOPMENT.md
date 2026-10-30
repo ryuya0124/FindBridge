@@ -75,7 +75,7 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 
 セッション復元を優先し、期限切れまたは保存セッションなしの場合だけ自動接続します。単なるネットワーク障害では再認証しません。自動試行は5分間隔で、失敗やキャンセルで停止し、所有者の再接続操作で再開します。バックグラウンド認証・確認コードの自動取得はありません。
 
-`apple-autologin.js` は保存を許可された情報をメモリ内で挿入し、HTTPSの `idmsa.apple.com` / `account.apple.com` の認証パスだけへ投入します。`apple-login-landing.js` はiCloudコンテナ内のApple認証iframeのボタン位置を検証します。ブリッジに資格情報を流さず、表示中WebView内のサインイン操作だけを行います。公式画面が変わった場合には手動入力へ戻れます。新しい確認コードは本人が入力します。
+`apple-autologin.js` は保存を許可された情報をメモリ内で挿入し、HTTPSの `idmsa.apple.com` / `account.apple.com` の認証パスだけへ投入します。`apple-login-landing.js` はiCloudの接続入口、`apple-login-relay.js` はApple認証iframeのボタン位置を検証します。Appleの認証フレームが重なっている場合も、実際の親子Windowと完全一致するoriginを各段で確認して中継します。ボタンは従来のIDに加えて、8言語のサインイン／続けるに対応します。ブリッジに資格情報を流さず、表示中WebView内のサインイン操作だけを行います。公式画面が変わった場合には手動入力へ戻れます。新しい確認コードは本人が入力します。
 
 ## 描画
 
@@ -83,7 +83,7 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 
 ## 画面・言語
 
-`NativeMotion` はAndroidX SpringAnimationを再ターゲットしてタッチの速度を継承します。シートは `SheetGestureLayout` と `SheetDetents`、タブは `NativeTabBar`、ページは `PageMotion`、設定パネルは `GlassPanel` が担当します。退場中のページは描画専用overlayへ移し、二重タップやアクセシビリティの重複を避けます。アプリの「動きを減らす」とOSのアニメーション無効設定を尊重します。
+`NativeMotion` はAndroidX SpringAnimationを再ターゲットしてタッチの速度を継承します。シートは `SheetGestureLayout` と `SheetDetents`、タブは `NativeTabBar`、ページは `PageMotion`、設定パネルは `GlassPanel` が担当します。モーダルは子のカードだけでなくホスト全体を既存オーバーレイより高いZへ置き、背面の一覧・タブへのタッチを遮ります。退場中のページは描画専用overlayへ移し、二重タップやアクセシビリティの重複を避けます。アプリの「動きを減らす」とOSのアニメーション無効設定を尊重します。
 
 `AdaptiveLayout` は幅・高さ・Insets・ヒンジから配置とカメラ余白を計算します。`PostureObserver` はWindowManagerのFoldingFeatureを監視し、開閉時はActivityと選択を維持します。認証と設定パネルは物理ペイン内に収めます。iPadとiPhone Duoの配置原則を参考にした独自のネイティブ実装です。Appleの描画エンジンそのものではありません。
 

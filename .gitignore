@@ -10,3 +10,5 @@ signing.properties
 artifacts/
 research/
 .DS_Store
+
+.codex-attachments/

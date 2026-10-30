@@ -35,6 +35,11 @@ internal class GlassPanel(
 
     init {
         id = MainActivity.PANEL_ID
+        // A child's elevation cannot lift it above siblings of its parent. Raise the
+        // full modal host (including its touch-blocking scrim) above every map overlay.
+        elevation =
+            (0 until root.childCount).maxOfOrNull { root.getChildAt(it).z }?.plus(activity.dp(8))
+                ?: activity.dp(24).toFloat()
         isClickable = true
         isFocusableInTouchMode = true
         for (i in 0 until root.childCount) root.getChildAt(i).let { view ->
@@ -114,6 +119,7 @@ internal class GlassPanel(
             }
         )
         root.addView(this, LayoutParams(-1, -1))
+        bringToFront()
         requestFocus()
         accessibilityPaneTitle = activity.getString(R.string.map_display_settings)
     }

@@ -27,10 +27,20 @@
         lastFilledAt = performance.now();
         notify(field.type === "password" ? "password-filled" : "account-filled");
     };
+    const nextLabels = /^(sign\s*in|continue|next|サインイン|ログイン|続ける|次へ|登录|登入|继续|繼續|下一步|로그인|계속|다음|iniciar sesión|continuar|siguiente|se connecter|continuer|suivant|anmelden|weiter)$/iu;
+    const nextButton = () => {
+        const candidates = [...document.querySelectorAll("#sign-in, #continue, button, input[type=submit], [role=button]")];
+        return candidates.find(button => {
+            if (!visible(button)) return false;
+            const labels = [button.getAttribute("aria-label"), button.textContent, button.value]
+                .filter(Boolean).map(label => label.trim().replace(/\s+/gu, " "));
+            return button.id === "sign-in" || labels.some(label => nextLabels.test(label));
+        });
+    };
     const submit = stage => {
         // Let Apple update its controlled inputs and finish installing the sign-in handler.
         if (performance.now() - lastFilledAt < 1500) return false;
-        const button = document.querySelector("#sign-in");
+        const button = nextButton();
         if (!visible(button) || button.disabled || button.getAttribute("aria-disabled") === "true") return false;
         button.scrollIntoView({behavior: "instant", block: "nearest"});
         const r = button.getBoundingClientRect();
@@ -45,7 +55,7 @@
             FindBridgeLoginTap.postMessage(JSON.stringify(request));
         } else {
             const parentOrigin = location.ancestorOrigins?.[0];
-            if (!/^https:\/\/www\.icloud\.com(?:\.cn)?$/.test(parentOrigin || "")) return false;
+            if (!/^https:\/\/(?:www\.icloud\.com(?:\.cn)?|(?:idmsa|account)\.apple\.com)$/.test(parentOrigin || "")) return false;
             parent.postMessage(request, parentOrigin);
         }
         return true;
@@ -58,8 +68,13 @@
         if (passwordSubmitted && [...document.querySelectorAll(".si-error, #errMsg, .error-message")].some(visible)) {
             stopped = true; notify("rejected"); return;
         }
-        const account = document.querySelector("#account_name_text_field");
-        const password = document.querySelector("#password_text_field");
+        const account = document.querySelector("#account_name_text_field, input[autocomplete=username], input[type=email]");
+        const password = document.querySelector("#password_text_field, input[autocomplete=current-password]");
+        // Some Apple variants navigate directly to a password-only document.
+        if (!accountSubmitted && visible(password) && (!visible(account) || account.readOnly || account.disabled)) {
+            accountSubmitted = true;
+            accountSubmittedAt = performance.now() - 1500;
+        }
         if (visible(account) && !accountSubmitted) {
             fill(account, login.account);
             accountSubmitted = submit("account");

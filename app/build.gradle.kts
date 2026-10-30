@@ -13,8 +13,8 @@ android {
         applicationId = "dev.findbridge.android"
         minSdk = 28
         targetSdk = 37
-        versionCode = 4
-        versionName = "3.1.0"
+        versionCode = 5
+        versionName = "3.1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += "arm64-v8a"

@@ -353,6 +353,12 @@ class AuthActivity : Activity() {
             pendingStages += stage
             submitWhenReady(stage, x, y)
         }
+        val relay = assets.open("apple-login-relay.js").bufferedReader().use { it.readText() }
+        WebViewCompat.addDocumentStartJavaScript(
+            webView,
+            relay,
+            origins + UrlPolicy.loginContainerOrigins,
+        )
         val landing = assets.open("apple-login-landing.js").bufferedReader().use { it.readText() }
         WebViewCompat.addDocumentStartJavaScript(
             webView,
