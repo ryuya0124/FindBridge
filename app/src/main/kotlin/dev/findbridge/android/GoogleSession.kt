@@ -106,6 +106,30 @@ internal class GoogleSession private constructor(context: Context) {
             CookieManager.getInstance().setAcceptThirdPartyCookies(view, false)
             check(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))
             check(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
+            if (BuildConfig.DEBUG) {
+                WebViewCompat.addWebMessageListener(
+                    view,
+                    "FindBridgeGoogleDebug",
+                    GoogleProtocol.dataOrigins,
+                ) { _, message, origin, mainFrame, _ ->
+                    if (
+                        mainFrame &&
+                            origin.toString().trimEnd('/') in GoogleProtocol.dataOrigins &&
+                            (message.data?.length ?: 0) <= 8000
+                    ) {
+                        runCatching {
+                            java.io
+                                .File(app.filesDir, "google-web-dom-state.json")
+                                .writeText(JSONObject(message.data!!).toString())
+                        }
+                    }
+                }
+                WebViewCompat.addDocumentStartJavaScript(
+                    view,
+                    app.assets.open("google-debug-state.js").bufferedReader().use { it.readText() },
+                    GoogleProtocol.dataOrigins,
+                )
+            }
             WebViewCompat.addWebMessageListener(
                 view,
                 "FindBridgeGoogleState",
@@ -145,6 +169,50 @@ internal class GoogleSession private constructor(context: Context) {
                     return@addWebMessageListener
                 if (runCatching { GoogleProtocol.devices(json) }.isFailure)
                     return@addWebMessageListener
+                if (BuildConfig.DEBUG) {
+                    val records = GoogleProtocol.devices(json)
+                    java.io
+                        .File(app.filesDir, "google-web-catalog-state.json")
+                        .writeText(
+                            JSONObject()
+                                .put("complete", json.optBoolean("complete"))
+                                .put("accountPresent", json.optString("account").isNotBlank())
+                                .put("devices", records.size)
+                                .put("located", records.count { it.located })
+                                .put(
+                                    "imageSources",
+                                    org.json.JSONArray().apply {
+                                        val source = json.optJSONArray("devices")
+                                        for (index in 0 until (source?.length() ?: 0)) {
+                                            val uri =
+                                                android.net.Uri.parse(
+                                                    source!!
+                                                        .getJSONObject(index)
+                                                        .optString("imageUrl")
+                                                )
+                                            put(
+                                                JSONObject()
+                                                    .put("scheme", uri.scheme.orEmpty())
+                                                    .put("host", uri.host.orEmpty())
+                                                    .put(
+                                                        "extension",
+                                                        uri.path
+                                                            .orEmpty()
+                                                            .substringAfterLast('.', "")
+                                                            .takeIf {
+                                                                it.matches(
+                                                                    Regex("[A-Za-z0-9]{1,8}")
+                                                                )
+                                                            }
+                                                            .orEmpty(),
+                                                    )
+                                            )
+                                        }
+                                    },
+                                )
+                                .toString()
+                        )
+                }
                 snapshot = text
                 CookieManager.getInstance().flush()
                 onData?.invoke(text)

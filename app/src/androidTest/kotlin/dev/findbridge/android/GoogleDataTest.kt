@@ -63,11 +63,11 @@ class GoogleDataTest {
                     <!doctype html><html><body>
                     <div role="dialog" id="consent"><button id="acknowledge" onclick="window.fixtureAcknowledgements++;document.getElementById('consent').hidden=true">Synthetic confirmation</button></div>
                     <div id="catalog">
-                      <div role="button" data-index="0" onclick="selectDevice(0)"><img alt="Device image">Fixture Phone A</div>
-                      <div role="button" data-index="1" onclick="selectDevice(1)"><img alt="Device image">Fixture Phone B</div>
+                      <section data-index="0"><div role="button" onclick="selectDevice(0)"><img alt="Device image">Fixture Phone A</div></section>
+                      <section data-index="1"><div role="button" onclick="selectDevice(1)"><img alt="Device image">Fixture Phone B</div></section>
                     </div>
                     <div id="details" hidden>
-                      <button aria-label="Back" onclick="document.getElementById('catalog').hidden=false;document.getElementById('details').hidden=true">Back</button>
+                      <button aria-label="戻る" onclick="document.getElementById('catalog').hidden=false;document.getElementById('details').hidden=true">Back</button>
                       <div id="name"></div><div id="status">Last seen: 5 minutes ago</div><div>54%</div>
                     </div>
                     <button onclick="window.remoteActionCount++">Play sound</button>
@@ -208,13 +208,19 @@ class GoogleDataTest {
     fun invalidCoordinatesCannotBecomeMapPinsAndSensitivePathsCannotOpen() {
         val snapshot =
             JSONObject(
-                """{"devices":[{"name":"Fixture","index":1,"latitude":999,"longitude":139,"battery":101}]}"""
+                """{"devices":[{"name":"Fixture","index":1,"latitude":999,"longitude":139,"battery":101,"imageUrl":"https://lh3.googleusercontent.com/fixture-art"}]}"""
             )
         val device = GoogleProtocol.devices(snapshot).single()
         assertFalse(device.located)
         assertNull(device.latitude)
         assertNull(device.longitude)
         assertNull(device.battery)
+        assertEquals("https://lh3.googleusercontent.com/fixture-art", device.imageUrl)
+        snapshot
+            .getJSONArray("devices")
+            .getJSONObject(0)
+            .put("imageUrl", "file:///data/local/private.png")
+        assertEquals("", GoogleProtocol.devices(snapshot).single().imageUrl)
         assertEquals(0L, device.timestamp)
         assertTrue(GoogleProtocol.isDataPage(GoogleProtocol.FIND_URL))
         assertTrue(GoogleProtocol.isDataPage("https://www.google.com/android/find/u/1/"))

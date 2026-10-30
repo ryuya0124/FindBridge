@@ -134,4 +134,5 @@
     <string name="google_gms_scope_unavailable">GoogleからFind Hubへのアクセスが許可されていません。現在、Androidの位置情報は取得できません。</string>
     <string name="google_gms_failed">Googleに接続できませんでした。通信環境を確認して、もう一度お試しください。</string>
     <string name="google_signed_in">Googleにログイン済みです。Androidのデバイスを表示するにはFind Hubへの接続を完了してください。</string>
+    <string name="devices_here">この場所のデバイス（%1$d台）</string>
 </resources>

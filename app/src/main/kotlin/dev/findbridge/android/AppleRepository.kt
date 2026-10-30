@@ -107,7 +107,16 @@ internal class AppleRepository private constructor(context: Context) {
                 content
                     .optJSONObject(index)
                     ?.takeIf { it.optString("id").isNotEmpty() }
-                    ?.let { AppleDevice.fromJson(it, owners) }
+                    ?.let {
+                        AppleDevice.fromJson(
+                            it,
+                            owners,
+                            response
+                                .optJSONObject("serverContext")
+                                ?.optString("imageBaseUrl")
+                                .orEmpty(),
+                        )
+                    }
             }
         updatedAt = System.currentTimeMillis()
         errorRes = 0

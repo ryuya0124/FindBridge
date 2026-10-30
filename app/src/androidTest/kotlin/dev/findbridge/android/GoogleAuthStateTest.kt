@@ -44,7 +44,14 @@ class GoogleAuthStateTest {
                 )
                 web.webViewClient =
                     object : WebViewClient() {
+                        private var checked = false
+
                         override fun onPageFinished(view: WebView, url: String) {
+                            if (
+                                checked || url != "https://accounts.google.com/v3/signin/identifier"
+                            )
+                                return
+                            checked = true
                             web.evaluateJavascript("document.readyState") {
                                 assertEquals(
                                     "Hidden form fields are not an owner verification",

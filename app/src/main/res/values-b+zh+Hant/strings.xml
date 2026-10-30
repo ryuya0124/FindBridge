@@ -134,4 +134,5 @@
     <string name="google_gms_scope_unavailable">Google 尚未允許此應用程式存取 Find Hub。目前無法取得 Android 位置。</string>
     <string name="google_gms_failed">無法連接 Google。請檢查網路後重試。</string>
     <string name="google_signed_in">已登入 Google。請完成 Find Hub 連線以顯示 Android 裝置。</string>
+    <string name="devices_here">此位置的裝置（%1$d 部）</string>
 </resources>

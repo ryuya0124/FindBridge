@@ -140,4 +140,5 @@
     <string name="google_gms_scope_unavailable">Google no ha permitido a esta app acceder a Find Hub. Las ubicaciones Android no están disponibles.</string>
     <string name="google_gms_failed">No se pudo conectar con Google. Comprueba la conexión e inténtalo de nuevo.</string>
     <string name="google_signed_in">Sesión de Google iniciada. Completa la conexión con Find Hub para mostrar los dispositivos Android.</string>
+    <string name="devices_here">Dispositivos aquí (%1$d)</string>
 </resources>

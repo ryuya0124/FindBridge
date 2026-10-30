@@ -28,6 +28,7 @@ internal data class AppleDevice(
     val locationEnabled: Boolean = true,
     val provider: DeviceProvider = DeviceProvider.APPLE,
     val reportedStatus: String = "",
+    val imageUrl: String = "",
 ) {
     val located: Boolean
         get() = latitude != null && longitude != null
@@ -113,6 +114,7 @@ internal data class AppleDevice(
         fun fromJson(
             json: JSONObject,
             members: Map<String, FamilyMember> = emptyMap(),
+            imageBaseUrl: String = "",
         ): AppleDevice {
             val location = json.optJSONObject("location")
             val lat =
@@ -152,6 +154,14 @@ internal data class AppleDevice(
                 ownerId = ownerId,
                 ownerName = owner?.name.orEmpty(),
                 locationEnabled = json.optBoolean("locationEnabled", true),
+                imageUrl =
+                    DeviceImageUrls.appleDevice(
+                        imageBaseUrl,
+                        json.optString("deviceClass"),
+                        json.optString("rawDeviceModel"),
+                        if (json.isNull("deviceColor")) "" else json.optString("deviceColor"),
+                        json.optString("deviceStatus") == "200",
+                    ),
             )
         }
     }

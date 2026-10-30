@@ -137,4 +137,5 @@
     <string name="google_gms_scope_unavailable">Google hat dieser App keinen Zugriff auf Find Hub gewährt. Android-Standorte sind derzeit nicht verfügbar.</string>
     <string name="google_gms_failed">Verbindung mit Google fehlgeschlagen. Prüfe die Internetverbindung und versuche es erneut.</string>
     <string name="google_signed_in">Bei Google angemeldet. Schließe die Find-Hub-Verbindung ab, um Android-Geräte anzuzeigen.</string>
+    <string name="devices_here">Geräte hier (%1$d)</string>
 </resources>

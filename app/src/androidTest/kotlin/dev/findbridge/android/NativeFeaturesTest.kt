@@ -38,6 +38,16 @@ class NativeFeaturesTest {
         assertEquals(AppleDevice.State.LOCATION_OFF to 0L, device.status())
         assertFalse(device.located)
         assertFalse(AppleDevice.fromJson(JSONObject("""{"id":"own","fmlyShare":true}""")).family)
+        val noColor =
+            AppleDevice.fromJson(
+                JSONObject(
+                    """{"id":"fixture-art","deviceClass":"MacBookAir","rawDeviceModel":"MacBookAir6,1","deviceColor":null}"""
+                )
+            )
+        assertEquals(
+            "https://statici.icloud.com/fmipmobile/deviceImages-9.0/MacBookAir/MacBookAir6,1/offline-sourcelist__3x.png",
+            noColor.imageUrl,
+        )
     }
 
     @Test

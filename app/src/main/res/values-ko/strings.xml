@@ -134,4 +134,5 @@
     <string name="google_gms_scope_unavailable">Google이 이 앱의 Find Hub 접근을 허용하지 않았습니다. 현재 Android 위치를 가져올 수 없습니다.</string>
     <string name="google_gms_failed">Google에 연결할 수 없습니다. 네트워크를 확인한 후 다시 시도하세요.</string>
     <string name="google_signed_in">Google에 로그인했습니다. Android 기기를 표시하려면 Find Hub 연결을 완료하세요.</string>
+    <string name="devices_here">이 위치의 기기(%1$d대)</string>
 </resources>

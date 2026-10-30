@@ -7,15 +7,25 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Shader
 import android.view.View
 import java.util.Locale
 
-/** Original vector silhouettes, without bundled Apple artwork or SF Symbols. */
+/** Provider artwork with original fallback symbols; images are not bundled into the APK. */
 internal class DeviceGlyph
 @JvmOverloads
 constructor(context: Context, private val kind: String = "iPhone") : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var artworkUrl: String? = null
+    private var artworkBitmap: Bitmap? = null
+    private var artworkRequested = false
+
+    constructor(context: Context, device: AppleDevice) : this(context, device.kind) {
+        if (device.provider == DeviceProvider.GOOGLE || device.imageUrl.isNotEmpty()) {
+            artworkUrl = device.imageUrl
+        }
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -23,12 +33,104 @@ constructor(context: Context, private val kind: String = "iPhone") : View(contex
         canvas.save()
         canvas.translate((width - size) / 2, (height - size) / 2)
         canvas.scale(size / 64, size / 64)
-        drawDevice(canvas, paint, kind)
+        val source = artworkUrl
+        if (source != null) {
+            if (artworkBitmap == null) artworkBitmap = DeviceImages.peek(source)
+            if (artworkBitmap == null && !artworkRequested) {
+                artworkRequested = true
+                val target = java.lang.ref.WeakReference(this)
+                DeviceImages.load(source) { bitmap ->
+                    target.get()?.let { view ->
+                        view.artworkBitmap = bitmap
+                        if (bitmap != null) view.invalidate()
+                    }
+                }
+            }
+            drawArtwork(canvas, paint, artworkBitmap)
+        } else drawDevice(canvas, paint, kind)
         canvas.restore()
     }
 
     companion object {
         fun marker(context: Context, kind: String, selected: Boolean): Bitmap {
+            return markerImage(context, kind, selected, null, false)
+        }
+
+        fun marker(context: Context, device: AppleDevice, selected: Boolean): Bitmap =
+            markerImage(
+                context,
+                device.kind,
+                selected,
+                DeviceImages.peek(device.imageUrl),
+                device.provider == DeviceProvider.GOOGLE || device.imageUrl.isNotEmpty(),
+            )
+
+        fun imageKey(device: AppleDevice): String =
+            if (device.provider == DeviceProvider.GOOGLE || device.imageUrl.isNotEmpty())
+                "art:${device.provider}:${device.imageUrl}"
+            else device.kind
+
+        fun cluster(context: Context, images: List<Bitmap>, count: Int): Bitmap {
+            val density = context.resources.displayMetrics.density
+            val bitmap =
+                Bitmap.createBitmap(
+                    (68 * density).toInt(),
+                    (76 * density).toInt(),
+                    Bitmap.Config.ARGB_8888,
+                )
+            val canvas = Canvas(bitmap)
+            canvas.scale(density, density)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+            images.take(2).reversed().forEachIndexed { index, image ->
+                val inset = if (index == 0 && images.size > 1) 11f else 0f
+                canvas.drawBitmap(image, null, RectF(inset, inset, 56 + inset, 64 + inset), paint)
+            }
+            paint.color = Color.WHITE
+            canvas.drawCircle(52f, 49f, 13f, paint)
+            paint.color = Ui.green
+            canvas.drawCircle(52f, 49f, 11f, paint)
+            paint.color = Color.WHITE
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface =
+                android.graphics.Typeface.create(
+                    "sans-serif-medium",
+                    android.graphics.Typeface.BOLD,
+                )
+            paint.textSize = if (count < 100) 12f else 9f
+            canvas.drawText(
+                count.toString(),
+                52f,
+                49f - (paint.ascent() + paint.descent()) / 2,
+                paint,
+            )
+            return bitmap
+        }
+
+        private fun drawArtwork(canvas: Canvas, paint: Paint, bitmap: Bitmap?) {
+            if (bitmap == null) {
+                paint.color = 0xffa4a8b0.toInt()
+                for (x in listOf(24f, 32f, 40f)) canvas.drawCircle(x, 32f, 2f, paint)
+                return
+            }
+            val scale = minOf(60f / bitmap.width, 60f / bitmap.height)
+            val width = bitmap.width * scale
+            val height = bitmap.height * scale
+            paint.isFilterBitmap = true
+            canvas.drawBitmap(
+                bitmap,
+                null,
+                RectF((64 - width) / 2, (64 - height) / 2, (64 + width) / 2, (64 + height) / 2),
+                paint,
+            )
+        }
+
+        private fun markerImage(
+            context: Context,
+            kind: String,
+            selected: Boolean,
+            artwork: Bitmap?,
+            originalArtwork: Boolean,
+        ): Bitmap {
             val density = context.resources.displayMetrics.density
             val size = ((if (selected) 66 else 52) * density).toInt()
             val bitmap =
@@ -59,7 +161,8 @@ constructor(context: Context, private val kind: String = "iPhone") : View(contex
             canvas.save()
             canvas.translate(10f, 8f)
             canvas.scale(.7f, .7f)
-            drawDevice(canvas, paint, kind)
+            if (originalArtwork) drawArtwork(canvas, paint, artwork)
+            else drawDevice(canvas, paint, kind)
             canvas.restore()
             return bitmap
         }

@@ -74,6 +74,7 @@ internal object GoogleProtocol {
                 address = "",
                 provider = DeviceProvider.GOOGLE,
                 reportedStatus = r.optString("status").take(200),
+                imageUrl = DeviceImageUrls.google(r.optString("imageUrl")),
             )
         }
     }

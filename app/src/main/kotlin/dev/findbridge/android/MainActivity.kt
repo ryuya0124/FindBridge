@@ -87,9 +87,16 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private val markers = mutableMapOf<Marker, String>()
     private val markerById = mutableMapOf<String, Marker>()
     private val markerKinds = mutableMapOf<String, String>()
+    private val markerGroups = mutableMapOf<String, List<String>>()
     private val iconCache = mutableMapOf<String, Icon>()
+    private val clusterIconCache =
+        object : android.util.LruCache<String, Icon>(4 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: Icon) = value.bitmap.allocationByteCount
+        }
     private lateinit var selectedPin: ImageView
     private var pinId: String? = null
+    private var pinImageKey: String? = null
+    private val deviceImageListener: () -> Unit = { renderMarkers() }
     private var selectedId: String? = null
     private var accountTab = false
     private var activeTab = 1
@@ -227,11 +234,15 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 glass.stopTracking()
                 glass.trackCamera(value)
                 frameRate.setMoving(false)
+                renderMarkers()
                 glass.capture(value, immediate = true)
             }
             mapView.addOnDidBecomeIdleListener { glass.capture(value, immediate = true) }
             value.setOnMarkerClickListener { marker ->
-                markers[marker]?.let(::select)
+                markers[marker]?.let { id ->
+                    val members = markerGroups[id]
+                    if (members != null) showMarkerGroup(members) else select(id)
+                }
                 true
             }
         }
@@ -1095,7 +1106,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 minimumHeight = dp(84)
                 background = Ui.ripple(Color.TRANSPARENT, 0)
             }
-        row.addView(DeviceGlyph(this, device.kind), LinearLayout.LayoutParams(dp(48), dp(52)))
+        row.addView(DeviceGlyph(this, device), LinearLayout.LayoutParams(dp(48), dp(52)))
         val labels = column()
         labels.addView(
             label(device.displayName(this), 17, Ui.ink, true).apply {
@@ -1137,7 +1148,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         val content = column().apply { setPadding(dp(22), 0, dp(22), dp(24)) }
         scroll.addView(content)
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(DeviceGlyph(this, device.kind), LinearLayout.LayoutParams(dp(40), dp(45)))
+        header.addView(DeviceGlyph(this, device), LinearLayout.LayoutParams(dp(40), dp(45)))
         header.addView(
             label(device.displayName(this), 24, Ui.ink, true),
             LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) },
@@ -1508,12 +1519,127 @@ class MainActivity : Activity(), AppleRepository.Listener {
         fitDevices(force = true)
     }
 
+    private fun deviceIcon(device: AppleDevice): Pair<String, Icon> {
+        val key = DeviceGlyph.imageKey(device)
+        iconCache[key]?.let {
+            return key to it
+        }
+        val original = device.provider == DeviceProvider.GOOGLE || device.imageUrl.isNotEmpty()
+        val ready = !original || DeviceImages.peek(device.imageUrl) != null
+        if (!ready && device.imageUrl.isNotEmpty()) DeviceImages.load(device.imageUrl)
+        val actualKey = if (ready) key else "$key:pending"
+        return actualKey to
+            iconCache.getOrPut(actualKey) {
+                IconFactory.getInstance(this).fromBitmap(DeviceGlyph.marker(this, device, false))
+            }
+    }
+
+    private fun showMarkerGroup(ids: List<String>) {
+        val members = visibleDevices().filter { it.id in ids }
+        if (members.isEmpty()) return
+        val content = column().apply { setPadding(dp(8), dp(12), dp(8), dp(12)) }
+        content.addView(
+            label(getString(R.string.devices_here, members.size), 21, Ui.ink, true).apply {
+                setPadding(dp(14), 0, dp(14), dp(12))
+            }
+        )
+        members.forEach { device ->
+            val index = content.childCount
+            addDeviceRow(content, device)
+            content.getChildAt(index).setOnClickListener {
+                panel?.dismiss(immediate = true)
+                select(device.id)
+            }
+        }
+        presentPanel(content)
+        panel?.accessibilityPaneTitle = getString(R.string.devices_here, members.size)
+    }
+
     private fun renderMarkers() {
         val current = map ?: return
         if (current.style?.isFullyLoaded != true) return
         val located = visibleDevices().filter { it.located }.associateBy { it.id }
+        val points =
+            located.values
+                .filter { it.id != selectedId }
+                .map { device ->
+                    val point =
+                        current.projection.toScreenLocation(
+                            LatLng(device.latitude!!, device.longitude!!)
+                        )
+                    MarkerPoint(device.id, point.x.toDouble(), point.y.toDouble())
+                }
+        val groups =
+            if (activeTab == 1) MarkerGroups.collect(points, dp(64).toDouble())
+            else points.map { listOf(it) }
+        data class DisplayMarker(
+            val id: String,
+            val position: LatLng,
+            val key: String,
+            val icon: Icon,
+        )
+        val nextGroups = mutableMapOf<String, List<String>>()
+        val display =
+            groups
+                .map { group ->
+                    val members = group.mapNotNull { located[it.id] }
+                    if (members.size == 1) {
+                        val device = members.first()
+                        val (key, icon) = deviceIcon(device)
+                        DisplayMarker(
+                            device.id,
+                            LatLng(device.latitude!!, device.longitude!!),
+                            key,
+                            icon,
+                        )
+                    } else {
+                        val ids = members.map { it.id }.sorted()
+                        val digest =
+                            java.security.MessageDigest.getInstance("SHA-256")
+                                .digest(ids.joinToString("\u0000").toByteArray())
+                                .take(12)
+                                .joinToString("") { "%02x".format(it) }
+                        val id = "cluster:$digest"
+                        nextGroups[id] = ids
+                        val first = members.first()
+                        val second =
+                            members.firstOrNull { it.provider != first.provider }
+                                ?: members.drop(1).first()
+                        val icons = listOf(first, second).map(::deviceIcon)
+                        val key = id + icons.joinToString { it.first }
+                        val icon =
+                            clusterIconCache.get(key)
+                                ?: IconFactory.getInstance(this)
+                                    .fromBitmap(
+                                        DeviceGlyph.cluster(
+                                            this,
+                                            icons.map { it.second.bitmap },
+                                            members.size,
+                                        )
+                                    )
+                                    .also { clusterIconCache.put(key, it) }
+                        val point =
+                            android.graphics.PointF(
+                                group.map { it.x }.average().toFloat(),
+                                group.map { it.y }.average().toFloat(),
+                            )
+                        DisplayMarker(id, current.projection.fromScreenLocation(point), key, icon)
+                    }
+                }
+                .toMutableList()
+        located[selectedId]?.let { device ->
+            val key = "selected-transparent"
+            val icon =
+                iconCache.getOrPut(key) {
+                    IconFactory.getInstance(this)
+                        .fromBitmap(Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888))
+                }
+            display +=
+                DisplayMarker(device.id, LatLng(device.latitude!!, device.longitude!!), key, icon)
+        }
+        val ids = display.map { it.id }.toSet()
         markerById.keys
-            .filter { it !in located }
+            .filter { it !in ids }
             .forEach { id ->
                 markerById.remove(id)?.let {
                     current.removeMarker(it)
@@ -1521,37 +1647,37 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 }
                 markerKinds.remove(id)
             }
-        located.values.forEach { device ->
-            val kind = if (device.id == selectedId) "selected-transparent" else device.kind
-            val icon =
-                iconCache.getOrPut(kind) {
-                    IconFactory.getInstance(this)
-                        .fromBitmap(
-                            if (kind == "selected-transparent")
-                                Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
-                            else DeviceGlyph.marker(this, device.kind, false)
-                        )
-                }
-            val point = LatLng(device.latitude!!, device.longitude!!)
+        markerGroups.clear()
+        markerGroups.putAll(nextGroups)
+        display.forEach { entry ->
             val marker =
-                markerById.getOrPut(device.id) {
-                    current.addMarker(MarkerOptions().position(point).icon(icon)).also {
-                        markers[it] = device.id
-                    }
+                markerById.getOrPut(entry.id) {
+                    current
+                        .addMarker(MarkerOptions().position(entry.position).icon(entry.icon))
+                        .also { markers[it] = entry.id }
                 }
-            if (marker.position != point) marker.position = point
-            if (markerKinds[device.id] != kind) marker.icon = icon
-            markerKinds[device.id] = kind
+            if (marker.position != entry.position) marker.position = entry.position
+            if (markerKinds[entry.id] != entry.key) marker.icon = entry.icon
+            markerKinds[entry.id] = entry.key
         }
         val selected = selected()?.takeIf { it.located }
         if (selected == null) {
             selectedPin.visibility = View.INVISIBLE
             pinId = null
+            pinImageKey = null
         } else {
-            if (pinId != selected.id) {
+            val key = DeviceGlyph.imageKey(selected)
+            val original =
+                selected.provider == DeviceProvider.GOOGLE || selected.imageUrl.isNotEmpty()
+            val ready = !original || DeviceImages.peek(selected.imageUrl) != null
+            val actualKey = if (ready) key else "$key:pending"
+            val alreadyDrawn = pinId == selected.id && pinImageKey == key
+            if (!alreadyDrawn && (pinId != selected.id || pinImageKey != actualKey)) {
+                val changedSelection = pinId != selected.id
                 pinId = selected.id
-                selectedPin.setImageBitmap(DeviceGlyph.marker(this, selected.kind, true))
-                if (!NativeMotion.reduced(this)) {
+                pinImageKey = actualKey
+                selectedPin.setImageBitmap(DeviceGlyph.marker(this, selected, true))
+                if (changedSelection && !NativeMotion.reduced(this)) {
                     selectedPin.scaleX = .78f
                     selectedPin.scaleY = .78f
                     selectedPin.alpha = 0f
@@ -1560,6 +1686,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
                     selectedPin.animate().alpha(1f).setDuration(120).start()
                 }
             }
+            if (!alreadyDrawn && !ready && selected.imageUrl.isNotEmpty())
+                DeviceImages.load(selected.imageUrl)
             positionSelectedPin()
         }
     }
@@ -1689,6 +1817,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         super.onStart()
         mapView.onStart()
         frameRate.start()
+        DeviceImages.addListener(deviceImageListener)
         windowAdapter =
             WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this)).also {
                 it.addWindowLayoutInfoListener(this, mainExecutor, foldListener)
@@ -1724,6 +1853,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onStop() {
+        DeviceImages.removeListener(deviceImageListener)
         frameRate.stop()
         windowAdapter?.removeWindowLayoutInfoListener(foldListener)
         windowAdapter = null

@@ -19,10 +19,15 @@
             if (!prompt || !prompt.contains(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
         }, {capture: true, passive: false});
     const click = element => { automating = true; try { element.click(); } finally { automating = false; } };
-    const list = () => [...document.querySelectorAll('[role="button"][data-index]')]
-        .filter(e => visible(e) && e.querySelector('img') && /^\d+$/.test(e.dataset.index));
-    const control = name => [...document.querySelectorAll('button,[role="button"]')]
-        .find(e => visible(e) && e.getAttribute('aria-label') === name);
+    const list = () => [...document.querySelectorAll('[data-index]')].flatMap(container => {
+        if (!visible(container) || !/^\d+$/.test(container.dataset.index)) return [];
+        // Mobile Find Hub puts data-index on the row around its clickable device card.
+        const element = container.matches('button,[role="button"]') ? container :
+            [...container.querySelectorAll('button,[role="button"]')].find(e => visible(e) && e.querySelector('img'));
+        return element && visible(element) && element.querySelector('img') ? [{element,index:Number(container.dataset.index)}] : [];
+    });
+    const backControl = () => [...document.querySelectorAll('button,[role="button"]')]
+        .find(e => visible(e) && ['Back','戻る','返回','返回上一頁','뒤로','Zurück','Atrás','Retour'].includes(e.getAttribute('aria-label')));
     const account = () => {
         const e = document.querySelector('[aria-label*="@"][role="button"],button[aria-label*="@"],a[aria-label*="@"]');
         return e?.getAttribute('aria-label')?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
@@ -55,10 +60,13 @@
     const read = () => {
         const buttons = list();
         for (const e of buttons) {
-            const index = Number(e.dataset.index), name = e.textContent.trim().slice(0, 200);
+            const index = e.index, name = e.element.textContent.trim().slice(0, 200);
             if (index > 499 || !name) continue;
             const existing = records.get(index);
             if (!existing || existing.name !== name) records.set(index, {index, name});
+            const image = e.element.querySelector('img');
+            const imageUrl = image?.currentSrc || image?.src || '';
+            if (imageUrl.length <= 4096) records.get(index).imageUrl = imageUrl;
         }
         for (const e of document.querySelectorAll('[data-location-lat][data-location-lng][data-slot-id]')) {
             // Slot identity comes from Google's marker, never from the map camera or last click.
@@ -81,8 +89,8 @@
             // Relative labels and retained markers do not establish a timestamp or online state.
         }
         const busy = [...document.querySelectorAll('[aria-busy="true"],[role="progressbar"]')].some(visible);
-        const settled = detailVisible && !busy && (Number.isFinite(detail.latitude) ||
-            /^(?:オフライン|Can.t reach|Unable to|Offline)/i.test(detail.status || ""));
+        const settled = detail && (Number.isFinite(detail.latitude) || (detailVisible && !busy &&
+            /^(?:オフライン|デバイスに接続でき|Can.t reach|Unable to|Offline)/i.test(detail.status || "")));
         return {buttons, settled};
     };
     const tick = () => {
@@ -97,7 +105,7 @@
         if (!running) { emit(true); return; }
         if (waitingForCatalog) {
             if (!buttons.length) return;
-            queue = requestedIndex >= 0 ? [requestedIndex] : buttons.map(e => Number(e.dataset.index));
+            queue = requestedIndex >= 0 ? [requestedIndex] : buttons.map(e => e.index);
             waitingForCatalog = false;
         }
         if (current !== null) {
@@ -107,14 +115,14 @@
         }
         if (!queue.length && records.size) { running = false; clearTimeout(cycleWatchdog); emit(true); return; }
         if (!buttons.length) {
-            const back = control('Back');
+            const back = backControl();
             if (back && !backRequested) { backRequested = true; click(back); }
             emit(false); return;
         }
         backRequested = false;
         const next = queue.shift();
-        const target = buttons.find(e => Number(e.dataset.index) === next);
-        if (target) { current = next; expiredDevice = false; armDeviceWatchdog(); click(target); }
+        const target = buttons.find(e => e.index === next);
+        if (target) { current = next; expiredDevice = false; armDeviceWatchdog(); click(target.element); }
         else schedule();
         emit(false);
     };
@@ -123,7 +131,7 @@
             const {buttons} = read();
             requestedIndex = index;
             waitingForCatalog = !buttons.length && !records.size;
-            queue = index >= 0 ? [index] : buttons.map(e => Number(e.dataset.index));
+            queue = index >= 0 ? [index] : buttons.map(e => e.index);
             clearTimeout(deviceWatchdog); expiredDevice = false;
             current = null; running = true; serial = ""; backRequested = false;
             armCycleWatchdog();
