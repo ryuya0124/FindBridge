@@ -10,5 +10,6 @@
     <instrumentation
         android:name="androidx.test.runner.AndroidJUnitRunner"
         android:targetPackage="dev.findbridge.android"
+        android:targetProcesses="${verificationTargetProcess}"
         android:functionalTest="true" />
 </manifest>

@@ -56,4 +56,27 @@ internal object UrlPolicy {
             uri.path == "/fmipservice/client/web/playSound"
     }
         .getOrDefault(false)
+
+    fun lostModeEndpoint(refreshAddress: String, family: Boolean): String {
+        require(isReadEndpoint(refreshAddress))
+        val uri = URI(refreshAddress)
+        val action = if (family) "lostDeviceWithFamilyAuth" else "lostDevice"
+        val query = uri.rawQuery?.let { "?$it" }.orEmpty()
+        return "https://${uri.rawAuthority}/fmipservice/client/web/$action$query"
+    }
+
+    fun isLostModeEndpoint(address: String): Boolean = runCatching {
+        val uri = URI(address)
+        uri.scheme == "https" &&
+            uri.userInfo == null &&
+            uri.port in listOf(-1, 443) &&
+            uri.fragment == null &&
+            uri.host.orEmpty().matches(Regex("p[0-9]+-fmipweb\\.icloud\\.com(?:\\.cn)?")) &&
+            uri.path in
+                listOf(
+                    "/fmipservice/client/web/lostDevice",
+                    "/fmipservice/client/web/lostDeviceWithFamilyAuth",
+                )
+    }
+        .getOrDefault(false)
 }

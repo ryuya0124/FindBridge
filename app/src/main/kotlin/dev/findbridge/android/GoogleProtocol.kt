@@ -47,6 +47,7 @@ internal object GoogleProtocol {
         return (0 until records.length()).mapNotNull { i ->
             val r = records.optJSONObject(i) ?: return@mapNotNull null
             val name = r.optString("name").take(200)
+            val model = r.optString("model").take(200).takeUnless { it == "null" }.orEmpty()
             val slot = r.optInt("index", -1)
             if (name.isBlank() || slot !in 0..499) return@mapNotNull null
             val id =
@@ -60,8 +61,24 @@ internal object GoogleProtocol {
                 r.optDouble("longitude", Double.NaN).takeIf { it.isFinite() && it in -180.0..180.0 }
             AppleDevice(
                 id = "google:$slot:$id",
-                name = name,
-                model = "Google Find Hub",
+                name =
+                    if (
+                        model.isNotBlank() &&
+                            name.lowercase() in
+                                setOf(
+                                    "不明なデバイス",
+                                    "unknown device",
+                                    "未知设备",
+                                    "未知裝置",
+                                    "알 수 없는 기기",
+                                    "unbekanntes gerät",
+                                    "appareil inconnu",
+                                    "dispositivo desconocido",
+                                )
+                    )
+                        model
+                    else name,
+                model = model.ifBlank { "Google Find Hub" },
                 kind = "Android",
                 family = false,
                 latitude = if (lon != null) lat else null,
@@ -75,6 +92,7 @@ internal object GoogleProtocol {
                 provider = DeviceProvider.GOOGLE,
                 reportedStatus = r.optString("status").take(200),
                 imageUrl = DeviceImageUrls.google(r.optString("imageUrl")),
+                metadata = DeviceMetadata.fromGoogle(r.optJSONObject("details")),
             )
         }
     }

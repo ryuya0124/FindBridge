@@ -9,6 +9,9 @@ import android.view.animation.LinearInterpolator
 import android.widget.Button
 
 /** The activity indicator animates inside a fixed button, without rotating its glass surface. */
+@android.annotation.SuppressLint(
+    "AppCompatCustomView"
+) // Platform-themed button; M2 is scoped to switches.
 internal class RefreshButton(context: Context) : Button(context) {
     private val paint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {

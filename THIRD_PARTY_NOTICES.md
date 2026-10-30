@@ -1,5 +1,6 @@
 # Third-party components
 
+- Material Components for Android 1.14.0: Apache License 2.0. Uses the Material 2 `SwitchMaterial` component. [Source](https://github.com/material-components/material-components-android), [included license](app/src/main/assets/licenses/material.txt).
 - MapLibre Native Android 13.7.1: BSD 2-Clause. [Source](https://github.com/maplibre/maplibre-native), [included license](app/src/main/assets/licenses/maplibre.txt).
 - AndroidX WebKit 1.18.0, DynamicAnimation 1.1.0, WindowManager 1.5.1, and AndroidX testing components: Apache License 2.0. [Source](https://android.googlesource.com/platform/frameworks/support/).
 - Google Play services Auth 22.0.0: Google APIs SDK / Google APIs Terms. [Documentation](https://developer.android.com/identity/authorization), [terms](https://developers.google.com/terms). Authentication only; no advertising SDK.

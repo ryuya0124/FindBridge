@@ -68,7 +68,21 @@ class GoogleDataTest {
                     </div>
                     <div id="details" hidden>
                       <button aria-label="戻る" onclick="document.getElementById('catalog').hidden=false;document.getElementById('details').hidden=true">Back</button>
-                      <div id="name"></div><div id="status">Last seen: 5 minutes ago</div><div>54%</div>
+                      <div id="name"></div><div id="location-status">Last seen: 5 minutes ago</div><div>54%</div>
+                      <div data-battery="50-charging" style="width:10px;height:10px"></div>
+                      <div><span data-wifi="4" style="display:inline-block;width:10px;height:10px"></span><span>Fixture Wi-Fi</span></div>
+                      <button onclick="document.getElementById('settings').hidden=false">settings</button>
+                    </div>
+                    <div id="settings" role="dialog" hidden>
+                      <div class="Z3br3c">
+                        <div class="KJqPCc" id="info-name"></div>
+                        <div class="e84yjf">Google Pixel 9</div>
+                        <div class="e84yjf" id="fixture-imei"></div>
+                        <div class="e84yjf">MEID: 00000000000001</div>
+                        <div class="e84yjf">First registered: Oct 1, 2026</div>
+                        <div class="e84yjf">Manufacturer: Fixture Manufacturer</div>
+                      </div>
+                      <button aria-label="Close" onclick="document.getElementById('settings').hidden=true">close</button>
                     </div>
                     <button onclick="window.remoteActionCount++">Play sound</button>
                     <button onclick="window.remoteActionCount++">Factory reset</button>
@@ -78,6 +92,8 @@ class GoogleDataTest {
                     window.fixtureAcknowledgements=0;
                     function selectDevice(index) {
                       document.getElementById('name').textContent=index===0?'Fixture Phone A':'Fixture Phone B';
+                      document.getElementById('info-name').textContent=document.getElementById('name').textContent;
+                      document.getElementById('fixture-imei').textContent='IMEI: 00000000000000'+(index+1);
                       document.getElementById('catalog').hidden=true;
                       document.getElementById('details').hidden=false;
                       document.getElementById('markers').innerHTML='<div data-slot-id="'+index+'" data-location-lat="'+(index===0?0:35.68)+'" data-location-lng="'+(index===0?139:139.76)+'"></div>';
@@ -120,6 +136,13 @@ class GoogleDataTest {
                 devices.all { it.battery == 0.54 && it.reportedStatus.startsWith("Last seen") }
             )
             assertTrue(devices.all { it.provider == DeviceProvider.GOOGLE && it.timestamp == 0L })
+            assertEquals("000000000000001", devices[0].metadata.imei)
+            assertEquals("000000000000002", devices[1].metadata.imei)
+            assertTrue(devices.all { it.model == "Google Pixel 9" && it.charging })
+            assertTrue(devices.all { it.metadata.meid == "00000000000001" })
+            assertTrue(devices.all { it.metadata.firstRegistered == "Oct 1, 2026" })
+            assertTrue(devices.all { it.metadata.manufacturer == "Fixture Manufacturer" })
+            assertTrue(devices.all { it.metadata.network == "Fixture Wi-Fi" })
             val checked = CountDownLatch(1)
             scenario.onActivity {
                 web.evaluateJavascript(

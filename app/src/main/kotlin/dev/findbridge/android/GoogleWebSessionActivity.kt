@@ -126,7 +126,10 @@ class GoogleWebSessionActivity : Activity() {
                     expectedAccount.isNotBlank() &&
                     !account.equals(expectedAccount, true)
             ) {
-                errorCallback?.invoke()
+                // Another Google account may still be active in this private profile.
+                // Request a handoff for the GMS-selected identity once; never accept
+                // that account's devices or operate its sign-in form automatically.
+                if (!handoffAttempted) requestHandoff() else errorCallback?.invoke()
             } else if (
                 account.isNotBlank() &&
                     account.equals(expectedAccount, true) &&

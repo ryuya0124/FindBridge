@@ -6,10 +6,12 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.view.ContextThemeWrapper
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.android.material.switchmaterial.SwitchMaterial
 
 internal object Ui {
     var dark = false
@@ -45,6 +47,23 @@ internal object Ui {
     fun Activity.dp(value: Int): Int = dp(value.toFloat())
 
     fun Activity.column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+    fun Activity.materialSwitch() =
+        SwitchMaterial(
+                ContextThemeWrapper(
+                    this,
+                    if (dark) R.style.Theme_FindBridge_Material2Switch_Dark
+                    else R.style.Theme_FindBridge_Material2Switch_Light,
+                )
+            )
+            .apply {
+                setUseMaterialThemeColors(true)
+                setTextColor(ink)
+                textSize = 14f
+                minHeight = dp(48)
+                switchPadding = dp(16)
+                isSaveEnabled = false
+            }
 
     fun Activity.label(value: String, size: Int, color: Int = ink, bold: Boolean = false) =
         TextView(this).apply {

@@ -29,6 +29,12 @@ internal data class AppleDevice(
     val provider: DeviceProvider = DeviceProvider.APPLE,
     val reportedStatus: String = "",
     val imageUrl: String = "",
+    val metadata: DeviceMetadata = DeviceMetadata(),
+    val lostModeSupported: Boolean = false,
+    val lostModeState: LostModeState = LostModeState.OFF,
+    val lostModeNeedsPasscode: Boolean = false,
+    val lostModePasscodeLength: Int = 6,
+    val lostModeMessageLimit: Int = 140,
 ) {
     val located: Boolean
         get() = latitude != null && longitude != null
@@ -154,6 +160,16 @@ internal data class AppleDevice(
                 ownerId = ownerId,
                 ownerName = owner?.name.orEmpty(),
                 locationEnabled = json.optBoolean("locationEnabled", true),
+                metadata = DeviceMetadata.fromApple(json),
+                lostModeSupported =
+                    json.optBoolean("lostModeCapable") ||
+                        json.optJSONObject("features")?.optBoolean("LST") == true,
+                lostModeState = LostMode.state(json),
+                lostModeNeedsPasscode = json.optJSONObject("features")?.optBoolean("KPD") == true,
+                lostModePasscodeLength =
+                    json.optInt("passcodeLength", 6).takeIf { it in 4..12 } ?: 6,
+                lostModeMessageLimit =
+                    json.optInt("maxMsgChar", 140).takeIf { it in 1..500 } ?: 140,
                 imageUrl =
                     DeviceImageUrls.appleDevice(
                         imageBaseUrl,

@@ -9,6 +9,22 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class GoogleIdentityTest {
     @Test
+    fun verifiedAccountsAreNotRestrictedToTheDeveloperOrAnEmailDomain() {
+        for (email in
+            listOf("first@example.invalid", "second@workspace.example", "Third@another.example")) {
+            val response =
+                JSONObject()
+                    .put("sub", "fixture:$email")
+                    .put("email", email)
+                    .put("email_verified", true)
+            assertEquals(email, GoogleIdentityClient.parse(response, email.lowercase()).email)
+            assertThrows(IllegalArgumentException::class.java) {
+                GoogleIdentityClient.parse(response, "a-different-user@example.invalid")
+            }
+        }
+    }
+
+    @Test
     fun onlyVerifiedIdentityForTheSelectedAccountIsAccepted() {
         val response =
             JSONObject()

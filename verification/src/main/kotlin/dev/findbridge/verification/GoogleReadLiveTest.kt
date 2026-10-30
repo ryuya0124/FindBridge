@@ -12,6 +12,8 @@ import android.os.Message
 import android.os.Messenger
 import android.util.Base64
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import java.security.KeyStore
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -30,6 +32,17 @@ class GoogleReadLiveTest {
         assumeTrue(InstrumentationRegistry.getArguments().getString("googleread") == "true")
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        // The service has one native client. Do not race the visible Activity's
+        // refresh with this separate, opt-in read-only instrumentation client.
+        instrumentation.runOnMainSync {
+            val monitor = ActivityLifecycleMonitorRegistry.getInstance()
+            Stage.values()
+                .flatMap { monitor.getActivitiesInStage(it) }
+                .distinct()
+                .filter { it.javaClass.name == "dev.findbridge.android.MainActivity" }
+                .forEach { it.finish() }
+        }
+        instrumentation.waitForIdleSync()
         val prefs = context.getSharedPreferences("google_identity", Context.MODE_PRIVATE)
         val key =
             KeyStore.getInstance("AndroidKeyStore")
@@ -56,6 +69,7 @@ class GoogleReadLiveTest {
         var endpoint: Messenger? = null
         var result: JSONObject? = null
         var failed = false
+        var lastProgress = ""
         val generation = 117
         val incoming =
             Messenger(
@@ -63,6 +77,25 @@ class GoogleReadLiveTest {
                     if (message.data.getInt("generation") == generation) {
                         if (message.what == 5) {
                             val snapshot = JSONObject(message.data.getString("snapshot").orEmpty())
+                            val progress =
+                                "${snapshot.optJSONArray("devices")?.length() ?: 0}:${snapshot.optBoolean("complete") }"
+                            if (progress != lastProgress) {
+                                lastProgress = progress
+                                instrumentation.sendStatus(
+                                    0,
+                                    Bundle().apply {
+                                        putString("googleProbePhase", "snapshot")
+                                        putInt(
+                                            "googleDeviceCount",
+                                            snapshot.optJSONArray("devices")?.length() ?: 0,
+                                        )
+                                        putBoolean(
+                                            "googleComplete",
+                                            snapshot.optBoolean("complete"),
+                                        )
+                                    },
+                                )
+                            }
                             if (snapshot.optBoolean("complete")) {
                                 result = snapshot
                                 finished.countDown()
@@ -91,6 +124,10 @@ class GoogleReadLiveTest {
             object : ServiceConnection {
                 override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                     endpoint = Messenger(binder)
+                    instrumentation.sendStatus(
+                        0,
+                        Bundle().apply { putString("googleProbePhase", "bound") },
+                    )
                     send(2)
                 }
 
@@ -139,6 +176,31 @@ class GoogleReadLiveTest {
                     putInt("googleLocatedCount", located)
                     putBoolean("googleComplete", true)
                     putBoolean("googleAccountMatches", true)
+                    val records = (0 until devices.length()).map { devices.getJSONObject(it) }
+                    putInt("googleModelCount", records.count { it.optString("model").isNotBlank() })
+                    putBoolean(
+                        "pixel9ModelReturned",
+                        records.any {
+                            it.optString("model").contains("Pixel 9", true)
+                        },
+                    )
+                    for (field in
+                        listOf(
+                            "imei",
+                            "meid",
+                            "manufacturer",
+                            "firstRegistered",
+                            "batteryState",
+                            "network",
+                            "carrier",
+                        )) {
+                        putInt(
+                            "googleField_$field",
+                            records.count {
+                                it.optJSONObject("details")?.optString(field).orEmpty().isNotBlank()
+                            },
+                        )
+                    }
                 },
             )
         } finally {

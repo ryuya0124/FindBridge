@@ -17,4 +17,21 @@
         <item name="android:windowBackground">#000000</item>
         <item name="android:windowSoftInputMode">adjustResize</item>
     </style>
+    <style name="Theme.FindBridge.Material2Switch.Light" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorControlActivated">#28B14E</item>
+        <item name="colorSurface">#FBFBFD</item>
+        <item name="colorOnSurface">#1C1C1E</item>
+        <item name="switchStyle">@style/Widget.FindBridge.Material2Switch</item>
+    </style>
+    <style name="Theme.FindBridge.Material2Switch.Dark" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="colorControlActivated">#32D74B</item>
+        <item name="colorSurface">#1C1C1E</item>
+        <item name="colorOnSurface">#F5F5F7</item>
+        <item name="switchStyle">@style/Widget.FindBridge.Material2Switch</item>
+    </style>
+    <style name="Widget.FindBridge.Material2Switch" parent="Widget.MaterialComponents.CompoundButton.Switch">
+        <item name="useMaterialThemeColors">true</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="switchPadding">16dp</item>
+    </style>
 </resources>

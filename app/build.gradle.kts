@@ -13,8 +13,8 @@ android {
         applicationId = "dev.findbridge.android"
         minSdk = 28
         targetSdk = 37
-        versionCode = 6
-        versionName = "3.2.0-rc1"
+        versionCode = 7
+        versionName = "3.2.0-rc2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += "arm64-v8a"
@@ -73,6 +73,7 @@ kotlin {
 }
 
 dependencies {
+    implementation("com.google.android.material:material:1.14.0")
     implementation("com.google.android.gms:play-services-auth:22.0.0")
     implementation("androidx.dynamicanimation:dynamicanimation:1.1.0")
     implementation("androidx.window:window-java:1.5.1")

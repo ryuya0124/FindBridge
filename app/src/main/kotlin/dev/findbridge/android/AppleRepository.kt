@@ -28,6 +28,9 @@ internal class AppleRepository private constructor(context: Context) {
     var sendingSound = false
         private set
 
+    var sendingLostMode = false
+        private set
+
     var devices: List<AppleDevice> = emptyList()
         private set
 
@@ -204,11 +207,67 @@ internal class AppleRepository private constructor(context: Context) {
         }
     }
 
-    private fun request(snapshot: JSONObject, allowSound: Boolean = false): JSONObject {
+    /** Only an explicit native confirmation calls this. No automatic retry of a remote lock. */
+    fun markLost(id: String, draft: LostModeDraft, completed: (LostModeResult) -> Unit) {
+        val device = devices.firstOrNull { it.id == id }
+        val current = session
+        val body = device?.let {
+            runCatching { LostMode.body(it, draft, current?.optJSONObject("body")) }.getOrNull()
+        }
+        if (current == null || device == null || body == null || sendingLostMode) {
+            completed(LostModeResult.REJECTED)
+            return
+        }
+        val snapshot =
+            JSONObject(current.toString())
+                .put("url", UrlPolicy.lostModeEndpoint(current.getString("url"), device.family))
+                .put("body", body)
+        val requestGeneration = generation
+        sendingLostMode = true
+        changed()
+        executor.execute {
+            val result = runCatching {
+                check(requestGeneration == generation)
+                LostMode.result(send(snapshot, RequestKind.LOST_MODE), id)
+            }
+                .getOrElse {
+                    if (it is AuthenticationExpiredException) LostModeResult.AUTH_REQUIRED
+                    else LostModeResult.UNKNOWN
+                }
+            main.post {
+                sendingLostMode = false
+                if (requestGeneration != generation) {
+                    completed(LostModeResult.UNKNOWN)
+                    return@post
+                }
+                if (result == LostModeResult.AUTH_REQUIRED) {
+                    requiresSignIn = true
+                    nativeTransportVerified = false
+                }
+                changed()
+                completed(result)
+                if (result == LostModeResult.REQUESTED) refresh()
+            }
+        }
+    }
+
+    private enum class RequestKind {
+        READ,
+        SOUND,
+        LOST_MODE,
+    }
+
+    private fun request(snapshot: JSONObject, allowSound: Boolean = false): JSONObject =
+        send(snapshot, if (allowSound) RequestKind.SOUND else RequestKind.READ)
+
+    private fun send(snapshot: JSONObject, kind: RequestKind): JSONObject {
         val address = snapshot.getString("url")
         require(
-            if (allowSound) UrlPolicy.isSoundEndpoint(address)
-            else UrlPolicy.isReadEndpoint(address)
+            when (kind) {
+                RequestKind.READ -> UrlPolicy.isReadEndpoint(address)
+                RequestKind.SOUND -> UrlPolicy.isSoundEndpoint(address)
+                RequestKind.LOST_MODE -> UrlPolicy.isLostModeEndpoint(address)
+            }
         )
         val connection = URI(address).toURL().openConnection() as HttpURLConnection
         connection.instanceFollowRedirects = false
@@ -244,7 +303,7 @@ internal class AppleRepository private constructor(context: Context) {
                     check(buffer.size() <= responseLimit)
                 }
             }
-            return if (allowSound && buffer.size() == 0) JSONObject()
+            return if (kind == RequestKind.SOUND && buffer.size() == 0) JSONObject()
             else JSONObject(buffer.toString(Charsets.UTF_8.name()))
         } finally {
             connection.disconnect()

@@ -25,7 +25,6 @@ import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.SeekBar
-import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.util.Consumer
@@ -41,6 +40,7 @@ import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
+import dev.findbridge.android.Ui.materialSwitch
 import dev.findbridge.android.Ui.space
 import org.maplibre.android.MapLibre
 import org.maplibre.android.annotations.Icon
@@ -460,7 +460,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         content.addView(label(getString(R.string.imagery_help), 11, Ui.muted))
         space(content, 14)
         content.addView(
-            Switch(this).apply {
+            materialSwitch().apply {
                 text = getString(R.string.reduce_motion)
                 textSize = 15f
                 setTextColor(Ui.ink)
@@ -1241,6 +1241,109 @@ class MainActivity : Activity(), AppleRepository.Listener {
         )
         content.addView(actions)
         space(content, 20)
+        if (device.provider == DeviceProvider.APPLE && device.lostModeSupported) {
+            val stateText =
+                getString(
+                    when (device.lostModeState) {
+                        LostModeState.OFF -> R.string.lost_activate
+                        LostModeState.PENDING -> R.string.lost_pending
+                        LostModeState.ENABLED -> R.string.lost_enabled
+                    }
+                )
+            content.addView(
+                actionButton(stateText, false).apply {
+                    id = LOST_MODE_ID
+                    isEnabled =
+                        device.lostModeState == LostModeState.OFF && !repository.sendingLostMode
+                    setOnClickListener { anchor ->
+                        presentPanel(
+                            LostModeForm(
+                                this@MainActivity,
+                                device,
+                                canceled = { panel?.dismiss() },
+                                confirmed = confirmed@{ draft ->
+                                        if (
+                                            !this@MainActivity.foreground ||
+                                                !this@MainActivity.hasWindowFocus()
+                                        )
+                                            return@confirmed
+                                        panel?.dismiss()
+                                        repository.markLost(device.id, draft) { result ->
+                                            if (
+                                                this@MainActivity.foreground &&
+                                                    !this@MainActivity.isFinishing
+                                            )
+                                                Toast.makeText(
+                                                        this@MainActivity,
+                                                        when (result) {
+                                                            LostModeResult.REQUESTED ->
+                                                                R.string.lost_requested
+                                                            LostModeResult.AUTH_REQUIRED ->
+                                                                R.string.sign_in_required
+                                                            LostModeResult.REJECTED ->
+                                                                R.string.lost_failed
+                                                            LostModeResult.UNKNOWN ->
+                                                                R.string.lost_unknown
+                                                        },
+                                                        Toast.LENGTH_LONG,
+                                                    )
+                                                    .show()
+                                        }
+                                    },
+                            ),
+                            anchor,
+                        )
+                    }
+                },
+                LinearLayout.LayoutParams(-1, dp(52)),
+            )
+            space(content, 16)
+        }
+        val information = device.metadata.rows().toMutableList()
+        val batteryState =
+            when (device.metadata.batteryState) {
+                "charging" -> getString(R.string.battery_charging)
+                "not_charging" -> getString(R.string.battery_not_charging)
+                "full" -> getString(R.string.battery_full)
+                else -> ""
+            }
+        if (batteryState.isNotBlank()) information += R.string.battery_status to batteryState
+        if (information.isNotEmpty()) {
+            content.addView(label(getString(R.string.device_information), 16, Ui.ink, true))
+            space(content, 10)
+            val card =
+                column().apply {
+                    setPadding(dp(14), dp(4), dp(14), dp(4))
+                    background = GlassDrawable(glass, this, dp(20).toFloat(), .38f)
+                }
+            for ((index, item) in information.withIndex()) {
+                if (index > 0)
+                    card.addView(
+                        View(this).apply { setBackgroundColor(Ui.separator) },
+                        LinearLayout.LayoutParams(-1, dp(.5f)),
+                    )
+                val row =
+                    LinearLayout(this).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(0, dp(12), 0, dp(12))
+                    }
+                row.addView(
+                    label(getString(item.first), 13, Ui.muted),
+                    LinearLayout.LayoutParams(0, -2, 1f),
+                )
+                row.addView(
+                    label(item.second, 13, Ui.ink).apply {
+                        gravity = Gravity.END
+                        setTextIsSelectable(true)
+                        setPadding(dp(12), 0, 0, 0)
+                    },
+                    LinearLayout.LayoutParams(0, -2, 1.4f),
+                )
+                card.addView(row)
+            }
+            content.addView(card)
+            space(content, 16)
+        }
         content.addView(
             label(getString(R.string.refresh_location), 16, Ui.blue).apply {
                 minHeight = dp(48)
@@ -1914,6 +2017,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     companion object {
+        const val LOST_MODE_ID = 0x16fb0130
         const val OPEN_FIND_ID = 1001
         const val MAP_ID = 1003
         const val REFRESH_ID = 1004

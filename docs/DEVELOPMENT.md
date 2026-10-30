@@ -18,6 +18,7 @@
 | Android Gradle Plugin | 9.5.0 |
 | Gradle | 9.8.2 |
 | Android Build Tools | 37.0.0 |
+| Material Components（Material 2のSwitchMaterial） | 1.14.0 |
 | MapLibre Native Android | 13.7.1 |
 | AndroidX WebKit | 1.18.0 |
 | AndroidX DynamicAnimation | 1.1.0 |
@@ -60,7 +61,7 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 ## データ取得
 
 - `AppleRepository`: origin/URLを制限した認証応答から、セッションとデバイス情報を受け取ります。以後はKotlinのHTTPクライアントで `refreshClient` を呼びます。30秒更新はフォアグラウンド中のみです。
-- `UrlPolicy`: 読み取り通信はAppleのHTTPSホストと `initClient` / `refreshClient` だけを許可。認証WebViewでも他のfmip操作を拒否します。サウンドは独立した明示操作の経路だけに限定します。ロック・消去のAPIはありません。
+- `UrlPolicy`: 読み取り通信はAppleのHTTPSホストと `initClient` / `refreshClient` だけを許可。認証WebViewでも他のfmip操作を拒否します。サウンドとApple紛失モードはそれぞれ独立した明示操作の経路だけに限定します。消去のAPIはありません。
 - `SecureSessionStore`: Android KeystoreのAES-256-GCM。セッション、ログイン情報、追加連携設定は別の鍵・領域です。世代番号と直列化した保存で、サインアウト／切断後の応答復活を防ぎます。
 - `FamilyMember` / `AppleDevice`: `userInfo.membersInfo` の所有者IDと各デバイスの `prsId` を照合します。`fmlyShare` 単独では所有者を判定しません。欠損位置、未知の電池、位置情報オフを区別します。
 - `LocationSyncRepository`: 所有者が選択したJSON、または証明書を固定したHTTPSのsnapshotを読み取る追加データ経路です。[形式と制約](LOCATION-SOURCES.md)を参照してください。
@@ -186,6 +187,27 @@ adb -s DEVICE uninstall dev.findbridge.verification
 
 所有者が保存済みの暗号化ログイン情報を持つ端末だけで実行します。パスワードをテスト引数へ渡しません。実際のネイティブタッチ、ソフトキーボード、キャンセル後の再接続、10秒間のフォーカス中断を検証します。`-e completedField FIELD` には、同じAPKのR8 mappingにある `LoginActivity.completed` の改名先を指定でき、終了だけでなく成功状態も確認できます。実際の接続操作でローカルの旧セッションを破棄して再認証します。端末をアンインストールして保存情報を失わせないでください。確認コードが必要なら所有者の操作を待ちます。
 
-GitHub Actionsはdebug/releaseのビルド、Lint、単体テストを実行します。CIには署名鍵とAppleの認証情報を置きません。署名済みAPKは非公開GitHub Releasesで配布します。エミュレータ・認証・地図の実表示はローカルの[検証記録](../VERIFICATION.md)を参照してください。
+GitHub Actionsはdebug/releaseのビルド、Lint、単体テストを実行します。CIには署名鍵とAppleの認証情報を置きません。署名済みAPKは公開GitHub Releasesで配布します。エミュレータ・認証・地図の実表示はローカルの[検証記録](../VERIFICATION.md)を参照してください。
 
 `MapIdleRenderingTest` は標準／航空写真の静止時のスナップショット数と地図描画数、取り込み解像度と実画素を確認します。`GoogleNativeCatalogLiveTest` は `-e googleread true` の明示指定で、本人が接続済みのGoogleセッションだけを読み取り、実カタログ・位置・読み込み終了・ネイティブ表示を確認します。Googleの認証画面を開いたり操作したりしません。`GoogleDataTest` は合成の公開座標を使い、異なる端末のマーカー混同や遠隔操作を検出します。`SavedLoginFormLiveTest` の `-e keyboard true` はソフトキーボードを表示した接続経路です。
+
+
+## Googleログインと一般配布
+
+[配布とGoogle OAuthの設定](DISTRIBUTION.md)に、リリース署名の照合、Android OAuthクライアント、基本スコープとTestingの例外、独自ビルドの注意点を記載しています。アカウントの許可リストは実装していません。UserInfoの確認済みアカウントとFind Hubのページのアカウントを照合し、不一致のカタログを受け入れません。切り替えでは旧端末一覧と接続状態を破棄します。旧Webアカウントが残っている場合は、GMSで選んだアカウントへの引き継ぎを1回試みます。
+
+## 端末情報と紛失モード
+
+`DeviceMetadata` はサービスが返した値だけを保持し、空値・JSON null・制御文字を除外します。Googleの設定パネルを読み取り専用で開き、機種名・IMEIまたはMEID・初回登録日を取得します。Wi-Fi / cellularの表示からネットワーク名・キャリア、batteryの表示から充電状態を取り込みます。メーカーやOSなども返る場合だけ表示します。モデル名からIMEIやメーカーを推測しません。詳細値はログに出しません。
+
+`LostModeForm` の入力→プレビュー→最終確認からだけ `AppleRepository.markLost` を呼びます。`/lostDevice` と `/lostDeviceWithFamilyAuth` は読み取り・サウンドとは別のURLポリシーで制限します。送信前に現在の対象・対応機能・状態を再確認し、二重送信と自動再試行をしません。HTTP成功は端末での有効化と同一視せず、読み取り応答から保留／有効を表示します。入力は保存・autofill対象外で、表示中はFLAG_SECUREを有効にし、閉じると値を消します。Googleの遠隔ロック・紛失モード解除・消去は未実装です。
+
+紛失モードのテストは架空端末と模擬応答だけを使用します。通常CIや実機の検証からリモートロックを送信しないでください。UWBは[Galaxyと暗号処理の検証](UWB-GALAXY.md)に記載した段階で、製品の測距機能には接続していません。
+
+
+独立したR8検証用の `verification` は、通常ビルドではGMSライブラリを同梱しません。重複したGMSのmanifest公開クラスがinstrumentationのクラスローダーで製品側のクラスを置き換え、R8後の親クラスと不整合になるためです。読み取りテストは、表示中のMainActivityを終了させて単一クライアントでサービスを検証します。GMS SDK自体の診断が必要な場合だけ `-PincludeGmsProbe=true :verification:assembleDebug` を使います。このGMS用診断APKと、通常起動のR8製品UIの検証は分けてください。
+
+
+スイッチはMaterial Components 1.14.0の `SwitchMaterial` とM2の `Widget.MaterialComponents.CompoundButton.Switch` を使用します。`Ui.materialSwitch()` 内だけでライト／ダークのMaterialテーマをラップし、アプリの外観設定と緑色へ合わせます。ログイン情報保存・自動ログイン・動きを減らすの3か所へ適用し、主画面・タブ・シートのテーマやアニメーションは変更しません。
+
+Googleの読み取りだけを単独プロセスで確認する場合は、`-PverificationTargetProcess=dev.findbridge.android:google :verification:assembleDebug` でドライバーをビルドします。同じ署名の製品APKをインストールし、`-e googleread true -e class dev.findbridge.verification.GoogleReadLiveTest` を指定します。MainActivityの表示中の更新とテストクライアントを競合させません。
