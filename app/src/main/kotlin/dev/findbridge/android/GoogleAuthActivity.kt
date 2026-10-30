@@ -95,7 +95,9 @@ class GoogleAuthActivity : Activity() {
             loading.visibility = if (required) View.GONE else View.VISIBLE
         }
         dataCallback = { snapshot ->
-            if (org.json.JSONObject(snapshot).optBoolean("complete")) {
+            // Authentication ends as soon as the real catalog is available. Position
+            // enrichment belongs to the native screen's bound refresh, not this cover.
+            if ((org.json.JSONObject(snapshot).optJSONArray("devices")?.length() ?: 0) > 0) {
                 setResult(RESULT_OK, Intent().putExtra(SNAPSHOT, snapshot))
                 finish()
             }

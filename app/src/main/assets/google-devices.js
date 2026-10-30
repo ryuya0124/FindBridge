@@ -3,7 +3,8 @@
     if (location.origin !== "https://www.google.com" || !/^\/android\/find\/?$/.test(location.pathname)) return;
     if (window.top !== window || window.FindBridgeGoogleReader) return;
     const records = new Map();
-    let queue = [], current = null, started = 0, lastChange = 0, serial = "", running = false;
+    let queue = [], current = null, serial = "", running = false, scheduled = false;
+    let deviceWatchdog = null, cycleWatchdog = null, expiredDevice = false;
     let waitingForCatalog = false, requestedIndex = __FINDBRIDGE_GOOGLE_INITIAL_INDEX__;
     let automating = false, lastDialog = false;
     const visible = e => e && e.getClientRects().length && getComputedStyle(e).visibility !== "hidden";
@@ -34,6 +35,21 @@
         serial = next;
         try { FindBridgeGoogleData.postMessage(next); } catch (_) {}
     };
+    const schedule = () => {
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(() => { scheduled = false; tick(); });
+    };
+    const armDeviceWatchdog = () => {
+        clearTimeout(deviceWatchdog);
+        // A missing/offline response must not stall the remaining catalog indefinitely.
+        // This is a failure deadline; normal responses advance on DOM events immediately.
+        deviceWatchdog = setTimeout(() => { expiredDevice = true; schedule(); }, 9000);
+    };
+    const armCycleWatchdog = () => {
+        clearTimeout(cycleWatchdog);
+        cycleWatchdog = setTimeout(() => { running = false; clearTimeout(deviceWatchdog); emit(true); }, 90000);
+    };
     const read = () => {
         const buttons = list();
         for (const e of buttons) {
@@ -52,8 +68,9 @@
             record.latitude = lat; record.longitude = lon;
         }
         const detail = records.get(current);
-        if (detail && !buttons.length && performance.now() - lastChange > 500 &&
-            [...document.querySelectorAll('h1,h2,h3,div,span')].some(e => visible(e) && e.textContent.trim() === detail.name)) {
+        const detailVisible = detail && !buttons.length &&
+            [...document.querySelectorAll('h1,h2,h3,div,span')].some(e => visible(e) && e.textContent.trim() === detail.name);
+        if (detailVisible) {
             const text = document.body.innerText;
             const battery = text.match(/(?:^|\n)\s*(\d{1,3})\s*%\s*(?:\n|$)/);
             if (battery && Number(battery[1]) <= 100) detail.battery = Number(battery[1]);
@@ -61,54 +78,65 @@
             if (status) detail.status = status.slice(0, 200);
             // Relative labels and retained markers do not establish a timestamp or online state.
         }
-        return buttons;
+        const busy = [...document.querySelectorAll('[aria-busy="true"],[role="progressbar"]')].some(visible);
+        const settled = detailVisible && !busy && (Number.isFinite(detail.latitude) ||
+            /^(?:オフライン|Can.t reach|Unable to|Offline)/i.test(detail.status || ""));
+        return {buttons, settled};
     };
     const tick = () => {
         const prompt = !!dialog();
-        if (prompt !== lastDialog) { lastDialog = prompt; state(); if (!prompt) started = performance.now(); }
+        if (prompt !== lastDialog) {
+            lastDialog = prompt; state();
+            clearTimeout(cycleWatchdog); clearTimeout(deviceWatchdog);
+            if (!prompt && running) { armCycleWatchdog(); if (current !== null) armDeviceWatchdog(); }
+        }
         if (prompt) return;
-        const buttons = read();
+        const {buttons, settled} = read();
         if (!running) return;
-        const now = performance.now();
-        if (now - started > 90000) { running = false; emit(true); return; }
         if (waitingForCatalog) {
             if (!buttons.length) return;
             queue = requestedIndex >= 0 ? [requestedIndex] : buttons.map(e => Number(e.dataset.index));
             waitingForCatalog = false;
         }
         if (current !== null) {
-            const record = records.get(current);
-            if (now - lastChange < 2500 || (!Number.isFinite(record?.latitude) && now - lastChange < 9000)) { emit(false); return; }
+            if (!settled && !expiredDevice) { emit(false); return; }
+            clearTimeout(deviceWatchdog); expiredDevice = false;
             current = null;
         }
-        if (!queue.length && records.size) { running = false; emit(true); return; }
+        if (!queue.length && records.size) { running = false; clearTimeout(cycleWatchdog); emit(true); return; }
         if (!buttons.length) {
             const back = control('Back');
-            if (back && now - lastChange > 800) { click(back); lastChange = now; }
+            if (back) click(back);
             emit(false); return;
         }
         const next = queue.shift();
         const target = buttons.find(e => Number(e.dataset.index) === next);
-        if (target) { current = next; lastChange = now; click(target); }
+        if (target) { current = next; expiredDevice = false; armDeviceWatchdog(); click(target); }
+        else schedule();
         emit(false);
     };
     window.FindBridgeGoogleReader = {
         start(index) {
-            const buttons = read();
+            const {buttons} = read();
             requestedIndex = index;
             waitingForCatalog = !buttons.length && !records.size;
             queue = index >= 0 ? [index] : buttons.map(e => Number(e.dataset.index));
-            current = null; started = performance.now(); lastChange = 0; running = true; serial = "";
+            clearTimeout(deviceWatchdog); expiredDevice = false;
+            current = null; running = true; serial = "";
+            armCycleWatchdog();
             if (!queue.length && records.size) queue = [...records.keys()];
             tick();
         },
-        stop() { running = false; queue = []; },
+        stop() { running = false; queue = []; clearTimeout(deviceWatchdog); clearTimeout(cycleWatchdog); },
         state,
     };
     // Start only after the authenticated device catalog has appeared.
     let begun = false;
-    setInterval(() => {
+    const changed = () => {
         if (!begun && list().length) { begun = true; window.FindBridgeGoogleReader.start(requestedIndex); }
-        else tick();
-    }, 450);
+        else schedule();
+    };
+    new MutationObserver(changed).observe(document, {subtree: true, childList: true, attributes: true, characterData: true});
+    for (const event of ['DOMContentLoaded', 'load', 'pageshow', 'resize']) addEventListener(event, changed);
+    changed();
 })();

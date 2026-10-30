@@ -4,13 +4,12 @@ import android.graphics.Bitmap
 
 /** Three separable box passes approximate a Gaussian blur, including on pre-AGSL devices. */
 internal object GlassBlur {
-    fun create(source: Bitmap): Bitmap {
+    fun create(source: Bitmap, radius: Int = 6): Bitmap {
         val width = source.width
         val height = source.height
         var pixels = IntArray(width * height)
         var scratch = IntArray(pixels.size)
         source.getPixels(pixels, 0, width, 0, 0, width, height)
-        val radius = 6
         val diameter = radius * 2 + 1
         fun pass(horizontal: Boolean) {
             val lines = if (horizontal) height else width

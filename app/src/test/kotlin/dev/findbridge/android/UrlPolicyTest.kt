@@ -1,5 +1,6 @@
 package dev.findbridge.android
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -72,5 +73,24 @@ class UrlPolicyTest {
                 "http://p169-fmipweb.icloud.com/fmipservice/client/web/initClient"
             )
         )
+    }
+
+    @Test
+    fun explicitSoundTransportPreservesTheQueryAndRejectsOtherCommands() {
+        val base = "https://p169-fmipweb.icloud.com/fmipservice/client/web/"
+        val endpoint = UrlPolicy.soundEndpoint(base + "refreshClient?token=a%2Fb%2Bc&dsid=fixture")
+        assertEquals(base + "playSound?token=a%2Fb%2Bc&dsid=fixture", endpoint)
+        assertTrue(UrlPolicy.isSoundEndpoint(endpoint))
+        assertFalse(UrlPolicy.isReadEndpoint(endpoint))
+        listOf("remoteWipe", "remoteLock", "remove", "initClient", "playSound/extra").forEach {
+            assertFalse(UrlPolicy.isSoundEndpoint(base + it))
+        }
+        listOf(
+                "http://p169-fmipweb.icloud.com/fmipservice/client/web/playSound",
+                "https://user@p169-fmipweb.icloud.com/fmipservice/client/web/playSound",
+                "https://p169-fmipweb.icloud.com.evil.example/fmipservice/client/web/playSound",
+                base + "playSound#fragment",
+            )
+            .forEach { assertFalse(UrlPolicy.isSoundEndpoint(it)) }
     }
 }

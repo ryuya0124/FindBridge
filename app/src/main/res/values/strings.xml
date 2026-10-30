@@ -41,7 +41,6 @@
     <string name="official_auth">Authentication uses Apple’s official page</string>
     <string name="back_to_list">Back to the list</string>
     <string name="play_sound">Play sound</string>
-    <string name="sound_disabled">Sound disabled</string>
     <string name="sound_disabled_accessibility">Play sound, currently disabled</string>
     <string name="directions">Directions</string>
     <string name="open_maps">Open in Maps</string>
@@ -124,4 +123,10 @@
     <string name="google_auth_help">Google may ask for your password or verification in its official screen.</string>
     <string name="google_sign_in_needed">Sign in to Google again to update Android locations.</string>
     <string name="google_source">Location from Google Find Hub. Google may require verification for offline locations.</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="sound_confirmation">Play a sound on %1$s?</string>
+    <string name="sound_action_help">Play on this device</string>
+    <string name="sound_connection_unavailable">Unavailable for this connection</string>
+    <string name="sound_request_sent">Sound request sent</string>
+    <string name="sound_request_unknown">The result of the sound request could not be confirmed</string>
 </resources>

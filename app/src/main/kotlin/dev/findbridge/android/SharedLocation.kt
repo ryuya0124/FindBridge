@@ -44,6 +44,7 @@ internal data class SharedLocation(
             false,
             address,
             ownerName = ownerName,
+            provider = DeviceProvider.SHARED,
         )
 
     companion object {

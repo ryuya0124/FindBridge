@@ -11,7 +11,7 @@ import java.net.URI
 import java.util.concurrent.Executors
 import org.json.JSONObject
 
-/** Only initClient and refreshClient are permitted. Mutating device APIs are absent. */
+/** Reads device locations. Sound is a separate, explicit owner-confirmed request. */
 internal class AppleRepository private constructor(context: Context) {
     private val application = context.applicationContext as android.app.Application
 
@@ -24,7 +24,10 @@ internal class AppleRepository private constructor(context: Context) {
     private val main = Handler(Looper.getMainLooper())
     private val listeners = mutableSetOf<Listener>()
     private var session = store.load()
-    private var generation = 0
+    @Volatile private var generation = 0
+    var sendingSound = false
+        private set
+
     var devices: List<AppleDevice> = emptyList()
         private set
 
@@ -155,9 +158,47 @@ internal class AppleRepository private constructor(context: Context) {
         }
     }
 
-    private fun request(snapshot: JSONObject): JSONObject {
+    /** Never invoked by refresh, sign-in, background timers or automatic retries. */
+    fun playSound(id: String, completed: (Boolean) -> Unit) {
+        val current = session
+        if (current == null || sendingSound || devices.none { it.id == id && it.canPlaySound }) {
+            completed(false)
+            return
+        }
+        val snapshot = JSONObject(current.toString())
+        snapshot.put("url", UrlPolicy.soundEndpoint(snapshot.getString("url")))
+        snapshot.put(
+            "body",
+            JSONObject()
+                .put("device", id)
+                .put("subject", "Find Bridge")
+                .put("clientContext", JSONObject().put("fmly", true)),
+        )
+        val requestGeneration = generation
+        sendingSound = true
+        changed()
+        executor.execute {
+            val accepted = runCatching {
+                check(generation == requestGeneration)
+                request(snapshot, allowSound = true).optInt("statusCode", 200) == 200
+            }
+                .getOrDefault(false)
+            main.post {
+                sendingSound = false
+                if (generation == requestGeneration) {
+                    changed()
+                    completed(accepted)
+                }
+            }
+        }
+    }
+
+    private fun request(snapshot: JSONObject, allowSound: Boolean = false): JSONObject {
         val address = snapshot.getString("url")
-        require(UrlPolicy.isReadEndpoint(address))
+        require(
+            if (allowSound) UrlPolicy.isSoundEndpoint(address)
+            else UrlPolicy.isReadEndpoint(address)
+        )
         val connection = URI(address).toURL().openConnection() as HttpURLConnection
         connection.instanceFollowRedirects = false
         connection.connectTimeout = 15_000
@@ -192,7 +233,8 @@ internal class AppleRepository private constructor(context: Context) {
                     check(buffer.size() <= responseLimit)
                 }
             }
-            return JSONObject(buffer.toString(Charsets.UTF_8.name()))
+            return if (allowSound && buffer.size() == 0) JSONObject()
+            else JSONObject(buffer.toString(Charsets.UTF_8.name()))
         } finally {
             connection.disconnect()
         }

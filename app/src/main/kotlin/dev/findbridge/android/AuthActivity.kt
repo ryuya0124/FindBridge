@@ -7,7 +7,8 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.InputDevice
-import android.view.MotionEvent
+import android.view.KeyCharacterMap
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -35,7 +36,7 @@ import java.io.ByteArrayInputStream
 import java.util.concurrent.Executors
 import org.json.JSONObject
 
-/** The only WebView in the app: Apple's authentication screen, closed when data is available. */
+/** Apple's official authentication screen, closed when a native session is available. */
 class AuthActivity : Activity() {
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
@@ -45,6 +46,7 @@ class AuthActivity : Activity() {
     private lateinit var progress: ProgressBar
     private lateinit var origin: TextView
     private lateinit var errorView: LinearLayout
+    private lateinit var automaticStatus: LinearLayout
     private var captured = false
     private lateinit var vault: LoginVault
     private val loginWorker = Executors.newSingleThreadExecutor()
@@ -52,7 +54,11 @@ class AuthActivity : Activity() {
     private var fold: FoldRegion? = null
     private var layoutPane: () -> Unit = {}
     private val submittedStages = mutableSetOf<String>()
-    private val pendingStages = mutableSetOf<String>()
+    private val pendingStages = mutableMapOf<String, String>()
+    private val dispatchedRequests = linkedMapOf<String, String>()
+    private var authGeneration = 0
+    private var readyEpoch = 0
+    private var imeWasVisible = false
     private var mainLoadFailed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,6 +74,16 @@ class AuthActivity : Activity() {
                 val bars =
                     insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
                 view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                val imeVisible = insets.isVisible(WindowInsets.Type.ime())
+                if (
+                    ::automaticStatus.isInitialized &&
+                        automaticStatus.visibility == View.VISIBLE &&
+                        imeVisible
+                )
+                    window.insetsController?.hide(WindowInsets.Type.ime())
+                if (imeWasVisible && !imeVisible && ::webView.isInitialized)
+                    webView.postOnAnimation { notifyLoginReady() }
+                imeWasVisible = imeVisible
                 WindowInsets.CONSUMED
             } else insets
         }
@@ -87,6 +103,7 @@ class AuthActivity : Activity() {
         val title = column()
         title.addView(label(getString(R.string.connect_account), 15, Ui.ink, true))
         origin = label("www.icloud.com", 10, Ui.muted)
+        if (intent.getBooleanExtra(USE_LOGIN, false)) origin.visibility = View.GONE
         title.addView(origin)
         header.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(
@@ -107,7 +124,29 @@ class AuthActivity : Activity() {
         val frame = FrameLayout(this)
         root.addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
         webView = WebView(this).apply { isSaveEnabled = false }
+        webView.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
+            if (r - l != or - ol || b - t != ob - ot) webView.postOnAnimation { notifyLoginReady() }
+        }
         frame.addView(webView, FrameLayout.LayoutParams(-1, -1))
+        automaticStatus =
+            column().apply {
+                id = AUTO_STATUS_ID
+                gravity = Gravity.CENTER
+                setBackgroundColor(Ui.surface)
+                setPadding(dp(28), dp(24), dp(28), dp(24))
+                isClickable = true
+                isFocusable = true
+                accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                addView(ProgressBar(this@AuthActivity), LinearLayout.LayoutParams(dp(36), dp(36)))
+                addView(
+                    label(getString(R.string.signing_in), 20, Ui.ink, true).apply {
+                        setPadding(0, dp(22), 0, 0)
+                    }
+                )
+                visibility =
+                    if (intent.getBooleanExtra(USE_LOGIN, false)) View.VISIBLE else View.GONE
+            }
+        frame.addView(automaticStatus, FrameLayout.LayoutParams(-1, -1))
         errorView =
             column().apply {
                 gravity = Gravity.CENTER
@@ -139,7 +178,12 @@ class AuthActivity : Activity() {
                 val login = LoginVault.takeStaged() ?: vault.load()
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
-                    if (login != null) installAutomaticLogin(login) else vault.pause()
+                    if (login != null) installAutomaticLogin(login)
+                    else {
+                        vault.pause()
+                        automaticStatus.visibility = View.GONE
+                        origin.visibility = View.VISIBLE
+                    }
                     webView.loadUrl(UrlPolicy.findUrl)
                 }
             }
@@ -180,6 +224,8 @@ class AuthActivity : Activity() {
                     url: String,
                     favicon: android.graphics.Bitmap?,
                 ) {
+                    authGeneration++
+                    pendingStages.clear()
                     mainLoadFailed = false
                     errorView.visibility = View.GONE
                 }
@@ -290,11 +336,21 @@ class AuthActivity : Activity() {
 
     @SuppressLint("RequiresFeature")
     private fun installAutomaticLogin(login: SavedLogin) {
+        automaticStatus.visibility = View.VISIBLE
+        origin.visibility = View.GONE
+        // The native form already supplies the credentials. Avoid a second autofill picker
+        // covering the automatic authentication window or reading its populated web fields.
+        webView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        webView.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         if (
             !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) ||
                 !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
-        )
+        ) {
+            automaticStatus.visibility = View.GONE
+            origin.visibility = View.VISIBLE
+            webView.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
             return
+        }
         val origins = UrlPolicy.credentialOrigins
         WebViewCompat.addWebMessageListener(webView, "FindBridgeLoginState", origins) {
             _,
@@ -303,12 +359,22 @@ class AuthActivity : Activity() {
             _,
             _ ->
             when (message.data) {
-                "rejected" -> {
+                "rejected",
+                "timeout" -> {
                     vault.pause()
+                    (errorView.getChildAt(0) as TextView).setText(R.string.sign_in_required)
+                    (errorView.getChildAt(1) as TextView).setText(R.string.auto_paused)
+                    errorView.visibility = View.VISIBLE
                     Toast.makeText(this, R.string.auto_paused, Toast.LENGTH_LONG).show()
                 }
-                "verification" ->
+                "verification" -> {
+                    automaticStatus.visibility = View.GONE
+                    origin.visibility = View.VISIBLE
+                    webView.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                    authGeneration++
+                    pendingStages.clear()
                     Toast.makeText(this, R.string.verification_help, Toast.LENGTH_LONG).show()
+                }
             }
         }
         val payload =
@@ -324,7 +390,7 @@ class AuthActivity : Activity() {
             webView,
             "FindBridgeLoginTap",
             origins + UrlPolicy.loginContainerOrigins,
-        ) { _, message, sourceOrigin, isMainFrame, _ ->
+        ) { _, message, sourceOrigin, isMainFrame, replyProxy ->
             if (!isMainFrame || captured) return@addWebMessageListener
             if (sourceOrigin.toString().trimEnd('/') !in origins + UrlPolicy.loginContainerOrigins)
                 return@addWebMessageListener
@@ -332,26 +398,32 @@ class AuthActivity : Activity() {
             val json =
                 runCatching { JSONObject(payload) }.getOrNull() ?: return@addWebMessageListener
             val stage = json.optString("stage")
-            if (
-                stage !in setOf("account", "password") ||
-                    stage in submittedStages ||
-                    stage in pendingStages
-            )
+            val requestId = json.optString("id")
+            if (stage !in setOf("account", "password") || !requestId.matches(Regex("[a-f0-9]{32}")))
                 return@addWebMessageListener
-            val viewportWidth = json.optDouble("width")
-            val x = json.optDouble("x") / viewportWidth
-            val y = json.optDouble("y") / viewportWidth
-            if (
-                !viewportWidth.isFinite() ||
-                    viewportWidth <= 0 ||
-                    !x.isFinite() ||
-                    !y.isFinite() ||
-                    x !in 0.0..1.0 ||
-                    y !in 0.0..8.0
-            )
+            fun reply(status: String, reason: String = "") {
+                val result =
+                    JSONObject()
+                        .put("type", "findbridge.auth.result")
+                        .put("id", requestId)
+                        .put("stage", stage)
+                        .put("status", status)
+                        .put("reason", reason)
+                        .put("epoch", readyEpoch)
+                        .toString()
+                runCatching { replyProxy.postMessage(result) }
+            }
+            if (dispatchedRequests[requestId] == stage) {
+                reply("dispatched")
                 return@addWebMessageListener
-            pendingStages += stage
-            submitWhenReady(stage, x, y)
+            }
+            if (stage in pendingStages) {
+                reply("retry", "busy")
+                return@addWebMessageListener
+            }
+            if (json.optString("mode") != "activate") return@addWebMessageListener
+            pendingStages[stage] = requestId
+            submitWhenReady(stage, requestId, ::reply)
         }
         val relay = assets.open("apple-login-relay.js").bufferedReader().use { it.readText() }
         WebViewCompat.addDocumentStartJavaScript(
@@ -367,53 +439,128 @@ class AuthActivity : Activity() {
         )
     }
 
+    /** Activates the focused button with trusted native input after focus and layout are ready. */
     private fun submitWhenReady(
         stage: String,
-        relativeX: Double,
-        relativeY: Double,
-        attempt: Int = 0,
+        requestId: String,
+        reply: (String, String) -> Unit,
+        visualReady: Boolean = false,
     ) {
-        webView.postDelayed(
-            {
-                if (isFinishing || isDestroyed || captured) {
-                    pendingStages.remove(stage)
-                    return@postDelayed
-                }
-                if (
-                    !window.decorView.hasWindowFocus() ||
-                        webView.width == 0 ||
-                        errorView.visibility == View.VISIBLE
-                ) {
-                    if (attempt < 40) submitWhenReady(stage, relativeX, relativeY, attempt + 1)
-                    else {
-                        pendingStages.remove(stage)
-                        vault.pause()
+        val generation = authGeneration
+        if (!visualReady) {
+            // DOM readiness precedes Chromium's input/compositor state, especially
+            // for nested frames. Wait for that completion event, never a duration.
+            webView.postVisualStateCallback(
+                generation.toLong(),
+                object : WebView.VisualStateCallback() {
+                    override fun onComplete(id: Long) {
+                        if (authGeneration == generation)
+                            submitWhenReady(stage, requestId, reply, visualReady = true)
+                        else {
+                            if (pendingStages[stage] == requestId) pendingStages.remove(stage)
+                            reply("retry", "closed")
+                        }
                     }
-                    return@postDelayed
-                }
-                val x = (relativeX * webView.width).toFloat()
-                val y = (relativeY * webView.width).toFloat()
-                if (y < 0 || y > webView.height) {
-                    pendingStages.remove(stage)
-                    return@postDelayed
-                }
-                pendingStages.remove(stage)
-                submittedStages += stage
-                val down = SystemClock.uptimeMillis()
-                fun dispatch(action: Int) {
-                    if (isFinishing || isDestroyed) return
-                    val event =
-                        MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0)
-                    event.source = InputDevice.SOURCE_TOUCHSCREEN
-                    webView.dispatchTouchEvent(event)
-                    event.recycle()
-                }
+                },
+            )
+            return
+        }
+        val queuedAt = SystemClock.uptimeMillis()
+        fun finish(status: String, reason: String = "") {
+            if (pendingStages[stage] == requestId) pendingStages.remove(stage)
+            reply(status, reason)
+        }
+        webView.postOnAnimation {
+            if (isFinishing || isDestroyed || captured || authGeneration != generation) {
+                finish("retry", "closed")
+                return@postOnAnimation
+            }
+            if (!window.decorView.hasWindowFocus()) {
+                finish("waiting", "focus")
+                return@postOnAnimation
+            }
+            if (SystemClock.uptimeMillis() - queuedAt > 750) {
+                finish("retry", "viewport")
+                return@postOnAnimation
+            }
+            if (
+                webView.width == 0 ||
+                    webView.isLayoutRequested ||
+                    errorView.visibility == View.VISIBLE
+            ) {
+                finish("retry", "viewport")
+                return@postOnAnimation
+            }
+            if (
+                android.os.Build.VERSION.SDK_INT >= 30 &&
+                    webView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+            ) {
+                window.insetsController?.hide(WindowInsets.Type.ime())
+                finish("waiting", "viewport")
+                return@postOnAnimation
+            }
+            // Acquiring native focus can reset the focused element in a child document.
+            // Let the script focus its button again after that transition, before input.
+            if (!webView.hasFocus()) {
                 webView.requestFocus()
-                dispatch(MotionEvent.ACTION_DOWN)
-                webView.postDelayed({ dispatch(MotionEvent.ACTION_UP) }, 70)
-            },
-            if (attempt == 0) 240L else 100L,
+                finish("retry", "focus")
+                return@postOnAnimation
+            }
+            val down = SystemClock.uptimeMillis()
+            fun dispatch(action: Int, cancelled: Boolean = false) {
+                val event =
+                    KeyEvent(
+                        down,
+                        SystemClock.uptimeMillis(),
+                        action,
+                        KeyEvent.KEYCODE_ENTER,
+                        0,
+                        0,
+                        KeyCharacterMap.VIRTUAL_KEYBOARD,
+                        0,
+                        if (cancelled) KeyEvent.FLAG_CANCELED else 0,
+                        InputDevice.SOURCE_KEYBOARD,
+                    )
+                webView.dispatchKeyEvent(event)
+            }
+            dispatch(KeyEvent.ACTION_DOWN)
+            webView.postOnAnimation up@{
+                if (isFinishing || isDestroyed) {
+                    finish("retry", "closed")
+                    return@up
+                }
+                if (authGeneration != generation || !window.decorView.hasWindowFocus()) {
+                    dispatch(KeyEvent.ACTION_UP, true)
+                    finish("waiting", "focus")
+                    return@up
+                }
+                dispatch(KeyEvent.ACTION_UP)
+                submittedStages += stage
+                if (dispatchedRequests.size >= 32)
+                    dispatchedRequests.remove(dispatchedRequests.keys.first())
+                dispatchedRequests[requestId] = stage
+                finish("dispatched")
+            }
+        }
+    }
+
+    private fun notifyLoginReady() {
+        if (
+            !::webView.isInitialized ||
+                isFinishing ||
+                isDestroyed ||
+                !window.decorView.hasWindowFocus()
         )
+            return
+        readyEpoch++
+        webView.evaluateJavascript("window.FindBridgeLoginRelay?.resume($readyEpoch)", null)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!::webView.isInitialized) return
+        if (hasFocus) webView.postOnAnimation { notifyLoginReady() }
+        else webView.evaluateJavascript("window.FindBridgeLoginRelay?.suspend()", null)
     }
 
     override fun onPause() {
@@ -455,5 +602,6 @@ class AuthActivity : Activity() {
 
     companion object {
         const val USE_LOGIN = "useLocalLogin"
+        const val AUTO_STATUS_ID = 1201
     }
 }

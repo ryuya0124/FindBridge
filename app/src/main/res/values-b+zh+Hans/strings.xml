@@ -41,7 +41,6 @@
     <string name="official_auth">身份验证使用 Apple 官方页面</string>
     <string name="back_to_list">返回列表</string>
     <string name="play_sound">播放声音</string>
-    <string name="sound_disabled">声音已停用</string>
     <string name="sound_disabled_accessibility">播放声音，当前已停用</string>
     <string name="directions">路线</string>
     <string name="open_maps">在地图中打开</string>
@@ -121,4 +120,10 @@
     <string name="google_auth_help">如需密码或身份验证，请在 Google 官方界面输入。</string>
     <string name="google_sign_in_needed">请重新登录 Google 以更新 Android 位置。</string>
     <string name="google_source">位置来源：Google Find Hub。离线位置可能需要 Google 身份验证。</string>
+    <string name="signing_in">正在登录…</string>
+    <string name="sound_confirmation">在“%1$s”上播放声音？</string>
+    <string name="sound_action_help">在此设备播放</string>
+    <string name="sound_connection_unavailable">此连接不支持此功能</string>
+    <string name="sound_request_sent">已发送播放声音请求</string>
+    <string name="sound_request_unknown">无法确认播放声音请求的结果</string>
 </resources>

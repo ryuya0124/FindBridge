@@ -69,6 +69,8 @@ internal class GoogleRepository private constructor(context: Context) {
                     if (pending != null) {
                         pendingIndex = null
                         send(GoogleProtocol.REFRESH, pending)
+                    } else if (loading) {
+                        send(GoogleProtocol.REFRESH)
                     } else if (
                         lastRefresh == 0L ||
                             android.os.SystemClock.elapsedRealtime() - lastRefresh >= 120_000L

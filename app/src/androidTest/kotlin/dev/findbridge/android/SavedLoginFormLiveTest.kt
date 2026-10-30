@@ -27,6 +27,7 @@ class SavedLoginFormLiveTest {
         val saved = vault.load()!!
         val connected = CountDownLatch(1)
         val cleared = CountDownLatch(1)
+        val formOnly = InstrumentationRegistry.getArguments().getString("formonly") == "true"
         lateinit var repository: AppleRepository
         val listener = AppleRepository.Listener {
             if (repository.hasSession && !repository.loading) {
@@ -37,8 +38,11 @@ class SavedLoginFormLiveTest {
         }
         instrumentation.runOnMainSync {
             repository = AppleRepository.get(context)
-            repository.logout()
-            CookieManager.getInstance().removeAllCookies { cleared.countDown() }
+            if (formOnly) cleared.countDown()
+            else {
+                repository.logout()
+                CookieManager.getInstance().removeAllCookies { cleared.countDown() }
+            }
             repository.addListener(listener)
         }
         assertTrue(cleared.await(10, TimeUnit.SECONDS))
@@ -92,9 +96,54 @@ class SavedLoginFormLiveTest {
                     )
                     activity.findViewById<View>(LoginActivity.CONTINUE_ID).performClick()
                 }
+                if (formOnly) {
+                    val until = SystemClock.uptimeMillis() + 120_000
+                    while (connected.count > 0 && SystemClock.uptimeMillis() < until) {
+                        connected.await(5, TimeUnit.SECONDS)
+                        instrumentation.runOnMainSync {
+                            val auth =
+                                androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+                                    .getInstance()
+                                    .getActivitiesInStage(
+                                        androidx.test.runner.lifecycle.Stage.RESUMED
+                                    )
+                                    .filterIsInstance<AuthActivity>()
+                                    .firstOrNull()
+                            if (auth != null) {
+                                val web =
+                                    AuthActivity::class
+                                        .java
+                                        .getDeclaredField("webView")
+                                        .apply { isAccessible = true }
+                                        .get(auth) as android.webkit.WebView
+                                val submitted =
+                                    AuthActivity::class
+                                        .java
+                                        .getDeclaredField("submittedStages")
+                                        .apply { isAccessible = true }
+                                        .get(auth)
+                                val pending =
+                                    AuthActivity::class
+                                        .java
+                                        .getDeclaredField("pendingStages")
+                                        .apply { isAccessible = true }
+                                        .get(auth)
+                                val ime =
+                                    if (android.os.Build.VERSION.SDK_INT >= 30)
+                                        auth.window.decorView.rootWindowInsets.isVisible(
+                                            android.view.WindowInsets.Type.ime()
+                                        )
+                                    else false
+                                println(
+                                    "Auth diagnostic: viewport=${web.width}x${web.height} ime=$ime focus=${web.hasWindowFocus()} submitted=$submitted pending=$pending"
+                                )
+                            }
+                        }
+                    }
+                }
                 assertTrue(
                     "Saved-form reconnect must finish through official Apple authentication",
-                    connected.await(120, TimeUnit.SECONDS),
+                    if (formOnly) connected.count == 0L else connected.await(120, TimeUnit.SECONDS),
                 )
                 assertTrue(repository.devices.any { it.located })
                 assertTrue(repository.familyMembers.isNotEmpty())

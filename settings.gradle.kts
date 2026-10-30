@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "FindBridge"
 
 include(":app")
+include(":verification")

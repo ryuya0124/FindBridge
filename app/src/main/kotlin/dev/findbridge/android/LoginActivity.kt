@@ -234,6 +234,9 @@ class LoginActivity : Activity() {
             return
         }
         busy = true
+        getSystemService(android.view.autofill.AutofillManager::class.java)?.cancel()
+        getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            .hideSoftInputFromWindow(account.windowToken, 0)
         credentialGeneration++
         val requestGeneration = credentialGeneration
         submit.isEnabled = false
@@ -288,8 +291,23 @@ class LoginActivity : Activity() {
                 finish()
             } else {
                 busy = false
-                submit.isEnabled = true
+                submit.isEnabled = false
                 submit.text = getString(R.string.connect_account)
+                val generation = credentialGeneration
+                worker.execute {
+                    val saved = vault.load()
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed || generation != credentialGeneration)
+                            return@runOnUiThread
+                        existing = saved?.takeIf { it.account == account.text.toString().trim() }
+                        password.hint =
+                            getString(
+                                if (existing != null) R.string.saved_password_hint
+                                else R.string.password
+                            )
+                        submit.isEnabled = true
+                    }
+                }
             }
         }
     }

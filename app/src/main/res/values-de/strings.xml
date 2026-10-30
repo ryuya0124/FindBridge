@@ -41,7 +41,6 @@
     <string name="official_auth">Authentifizierung über die offizielle Apple-Seite</string>
     <string name="back_to_list">Zurück zur Liste</string>
     <string name="play_sound">Ton abspielen</string>
-    <string name="sound_disabled">Ton deaktiviert</string>
     <string name="sound_disabled_accessibility">Ton abspielen, derzeit deaktiviert</string>
     <string name="directions">Route</string>
     <string name="open_maps">In Karten öffnen</string>
@@ -124,4 +123,10 @@
     <string name="google_auth_help">Gib Passwort und Bestätigung bei Bedarf auf der offiziellen Google-Seite ein.</string>
     <string name="google_sign_in_needed">Melde dich erneut bei Google an, um Android-Standorte zu aktualisieren.</string>
     <string name="google_source">Standort von Google Find Hub. Offline-Standorte können eine Bestätigung bei Google erfordern.</string>
+    <string name="signing_in">Anmeldung läuft…</string>
+    <string name="sound_confirmation">Ton auf %1$s abspielen?</string>
+    <string name="sound_action_help">Auf diesem Gerät abspielen</string>
+    <string name="sound_connection_unavailable">Mit dieser Verbindung nicht verfügbar</string>
+    <string name="sound_request_sent">Tonanfrage gesendet</string>
+    <string name="sound_request_unknown">Das Ergebnis der Tonanfrage konnte nicht bestätigt werden</string>
 </resources>

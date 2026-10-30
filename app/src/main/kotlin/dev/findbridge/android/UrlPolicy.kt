@@ -38,4 +38,22 @@ internal object UrlPolicy {
             uri.path.orEmpty().matches(Regex("/fmipservice/client/web/(initClient|refreshClient)"))
     }
         .getOrDefault(false)
+
+    fun soundEndpoint(refreshAddress: String): String {
+        require(isReadEndpoint(refreshAddress))
+        val uri = URI(refreshAddress)
+        val query = uri.rawQuery?.let { "?$it" }.orEmpty()
+        return "https://${uri.rawAuthority}/fmipservice/client/web/playSound$query"
+    }
+
+    fun isSoundEndpoint(address: String): Boolean = runCatching {
+        val uri = URI(address)
+        uri.scheme == "https" &&
+            uri.userInfo == null &&
+            uri.port in listOf(-1, 443) &&
+            uri.fragment == null &&
+            uri.host.orEmpty().matches(Regex("p[0-9]+-fmipweb\\.icloud\\.com(?:\\.cn)?")) &&
+            uri.path == "/fmipservice/client/web/playSound"
+    }
+        .getOrDefault(false)
 }

@@ -19,7 +19,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NativeSessionLiveTest {
     @Test
-    fun persistedSessionFetchesDevicesWithoutAWebViewAndSoundStaysDisabled() {
+    fun persistedSessionFetchesDevicesWithoutAWebViewOrAutomaticSound() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("live") == "true")
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         lateinit var repository: AppleRepository
@@ -95,7 +95,11 @@ class NativeSessionLiveTest {
                 ((label!!.parent as View).parent as View).performClick()
                 val sound = activity.findViewById<View>(MainActivity.SOUND_ID)
                 assertNotNull(sound)
-                assertFalse("No sound must be possible during debugging", sound.isEnabled)
+                assertFalse(
+                    "Rendering details never sends a sound request",
+                    repository.sendingSound,
+                )
+                assertTrue(sound.isEnabled == device.canPlaySound)
             }
         }
     }

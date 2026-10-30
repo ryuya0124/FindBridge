@@ -41,7 +41,6 @@
     <string name="official_auth">L’authentification utilise la page officielle d’Apple</string>
     <string name="back_to_list">Retour à la liste</string>
     <string name="play_sound">Émettre un son</string>
-    <string name="sound_disabled">Son désactivé</string>
     <string name="sound_disabled_accessibility">Émettre un son, désactivé</string>
     <string name="directions">Itinéraire</string>
     <string name="open_maps">Ouvrir dans Plans</string>
@@ -127,4 +126,10 @@
     <string name="google_auth_help">Saisissez votre mot de passe ou vérification sur l’écran officiel de Google si nécessaire.</string>
     <string name="google_sign_in_needed">Reconnectez-vous à Google pour actualiser les positions Android.</string>
     <string name="google_source">Position fournie par Google Find Hub. Les positions hors ligne peuvent nécessiter une vérification Google.</string>
+    <string name="signing_in">Connexion…</string>
+    <string name="sound_confirmation">Émettre un son sur %1$s ?</string>
+    <string name="sound_action_help">Émettre sur cet appareil</string>
+    <string name="sound_connection_unavailable">Indisponible avec cette connexion</string>
+    <string name="sound_request_sent">Demande de son envoyée</string>
+    <string name="sound_request_unknown">Le résultat de la demande n’a pas pu être confirmé</string>
 </resources>

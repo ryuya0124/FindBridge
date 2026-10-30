@@ -67,17 +67,21 @@ internal class GlassDrawable(
             bitmap?.let {
                 paint.color = Color.WHITE
                 paint.alpha = drawableAlpha
+                canvas.save()
+                canvas.translate(-origin.first, -origin.second)
+                canvas.concat(scene.viewportTransform)
                 canvas.drawBitmap(
                     it,
                     null,
                     RectF(
-                        -origin.first,
-                        -origin.second,
-                        scene.width - origin.first,
-                        scene.height - origin.second,
+                        0f,
+                        0f,
+                        scene.width.toFloat(),
+                        scene.height.toFloat(),
                     ),
                     paint,
                 )
+                canvas.restore()
             }
             paint.color = if (Ui.dark) 0xe82b2b31.toInt() else 0xe8fafafd.toInt()
             canvas.drawRoundRect(rect, radius, radius, paint)
@@ -114,6 +118,9 @@ private class GlassShader33 {
             uniform float2 origin;
             uniform float2 panelSize;
             uniform float sceneScale;
+            uniform float3 sampleX;
+            uniform float3 sampleY;
+            uniform float3 sampleW;
             uniform float corner;
             uniform float material;
             uniform float dark;
@@ -129,7 +136,9 @@ private class GlassShader33 {
                 if(alpha<0.001) return half4(0.0);
                 float2 n=q/max(length(q),0.001);
                 float edge=1.0-smoothstep(0.0,26.0,-distance);
-                float2 samplePoint=(p+origin+n*edge*edge*(5.0+strength*9.0+contact*8.0))*sceneScale;
+                float3 position=float3(p+origin+n*edge*edge*(5.0+strength*9.0+contact*8.0),1.0);
+                float denominator=dot(sampleW,position);
+                float2 samplePoint=float2(dot(sampleX,position),dot(sampleY,position))/max(denominator,0.001)*sceneScale;
                 half4 c=scene.eval(samplePoint);
                 float3 rgb=float3(c.rgb);
                 float luminance=dot(rgb,float3(0.2126,0.7152,0.0722));
@@ -172,6 +181,10 @@ private class GlassShader33 {
         shader.setFloatUniform("origin", origin.first, origin.second)
         shader.setFloatUniform("panelSize", bounds.width(), bounds.height())
         shader.setFloatUniform("sceneScale", bitmap.width.toFloat() / scene.width.coerceAtLeast(1))
+        val transform = scene.samplingTransform
+        shader.setFloatUniform("sampleX", transform[0], transform[1], transform[2])
+        shader.setFloatUniform("sampleY", transform[3], transform[4], transform[5])
+        shader.setFloatUniform("sampleW", transform[6], transform[7], transform[8])
         shader.setFloatUniform("corner", radius)
         shader.setFloatUniform("material", material)
         shader.setFloatUniform("dark", if (Ui.dark) 1f else 0f)

@@ -60,7 +60,7 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 ## データ取得
 
 - `AppleRepository`: origin/URLを制限した認証応答から、セッションとデバイス情報を受け取ります。以後はKotlinのHTTPクライアントで `refreshClient` を呼びます。30秒更新はフォアグラウンド中のみです。
-- `UrlPolicy`: AppleのHTTPSホストと `initClient` / `refreshClient` だけを許可。認証WebViewでも他のfmip操作を拒否します。サウンド・ロック・消去のAPIはありません。
+- `UrlPolicy`: 読み取り通信はAppleのHTTPSホストと `initClient` / `refreshClient` だけを許可。認証WebViewでも他のfmip操作を拒否します。サウンドは独立した明示操作の経路だけに限定します。ロック・消去のAPIはありません。
 - `SecureSessionStore`: Android KeystoreのAES-256-GCM。セッション、ログイン情報、追加連携設定は別の鍵・領域です。世代番号と直列化した保存で、サインアウト／切断後の応答復活を防ぎます。
 - `FamilyMember` / `AppleDevice`: `userInfo.membersInfo` の所有者IDと各デバイスの `prsId` を照合します。`fmlyShare` 単独では所有者を判定しません。欠損位置、未知の電池、位置情報オフを区別します。
 - `LocationSyncRepository`: 所有者が選択したJSON、または証明書を固定したHTTPSのsnapshotを読み取る追加データ経路です。[形式と制約](LOCATION-SOURCES.md)を参照してください。
@@ -75,7 +75,9 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 
 セッション復元を優先し、期限切れまたは保存セッションなしの場合だけ自動接続します。単なるネットワーク障害では再認証しません。自動試行は5分間隔で、失敗やキャンセルで停止し、所有者の再接続操作で再開します。バックグラウンド認証・確認コードの自動取得はありません。
 
-`apple-autologin.js` は保存を許可された情報をメモリ内で挿入し、HTTPSの `idmsa.apple.com` / `account.apple.com` の認証パスだけへ投入します。`apple-login-landing.js` はiCloudの接続入口、`apple-login-relay.js` はApple認証iframeのボタン位置を検証します。Appleの認証フレームが重なっている場合も、実際の親子Windowと完全一致するoriginを各段で確認して中継します。ボタンは従来のIDに加えて、8言語のサインイン／続けるに対応します。ブリッジに資格情報を流さず、表示中WebView内のサインイン操作だけを行います。公式画面が変わった場合には手動入力へ戻れます。新しい確認コードは本人が入力します。
+`apple-autologin.js` は保存を許可された情報をメモリ内で挿入し、HTTPSの `idmsa.apple.com` / `account.apple.com` の認証パスだけへ投入します。`apple-login-landing.js` はiCloudの接続入口、`apple-login-relay.js` はApple認証iframeの実際の親子Windowと完全一致するoriginを各段で検証します。ボタンは従来のIDに加えて、8言語のサインイン／続けるに対応します。ブリッジに資格情報を流しません。新しい確認コードは本人が入力します。
+
+自動接続はネイティブの状態表示で公式ページを覆い、追加確認のときだけ表示を切り替えます。WebViewのautofillは自動接続中に無効とし、親の入力フォームのautofillセッションも接続時に閉じます。DOMの変化、描画フレーム、フォーカスとIMEのイベントで入力と送信を進めます。HTML到着を待つ固定時間や周期ポーリングはありません。120秒のタイマーは停止時のエラー通知用で、通常処理の開始を遅らせるものではありません。フォーカス中断は送信済みと扱わず、復帰イベントで再開します。入力画面へ戻った場合は暗号化領域から保存情報を読み直します。
 
 ## Google Find Hub（試験実装）
 
@@ -85,13 +87,23 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 
 `GoogleProtocol` は正規化した端末情報を検証し、`GoogleRepository` へMessengerで渡します。最大500件・240,000文字、座標は有限かつ緯度経度の対が有効な場合だけ受け付けます。相対的な最終検知ラベルを現在時刻に書き換えません。GoogleとAppleの同名端末は別IDです。
 
-Googleはフォアグラウンドで2分以上経過したときと明示的な更新時に読み込みます。取得完了時はWebViewを破棄し、画面を離れるとbound serviceも解放します。非公開APIのOAuthトークンやAndroidのマスタートークンは使用しません。
+Googleはフォアグラウンドで2分以上経過したときと明示的な更新時に読み込みます。DOMアダプターはMutationObserverと描画フレームで進み、端末ごとの固定待機はありません。9秒／90秒の失敗期限で無応答時だけ打ち切ります。認証画面は実カタログ取得時点で閉じ、位置の取得はネイティブ画面から続けます。取得完了時はWebViewを破棄し、画面を離れるとbound serviceも解放します。非公開APIのOAuthトークンやAndroidのマスタートークンは使用しません。
+
+## サウンドとUWB
+
+`SoundConfirmation` の肯定ボタンからだけ `AppleRepository.playSound` を呼びます。現在のAppleセッション内に存在する対応デバイスだけを受け付け、`playSound` だけを許可するURL検証を通します。自動更新・自動ログイン・バックグラウンド・再試行キューからは呼びません。送信を自動再試行せず、応答成功と実機の発音成功を区別します。Googleと追加連携のIDは送信不可です。サウンドのテストはローカルのカウンターだけを呼び、実機への送信はしていません。
+
+UWBは未実装です。Android単体で標準の「探す」の対象と直接接続するための未解決点と一次資料を[UWB調査](UWB.md)に記載しています。iPhone側の連携アプリを前提とする実装は含めません。
 
 現時点で実アカウントのブラウザ上の端末一覧・位置と、アプリ内の公式サインイン開始を確認しています。HTML fixtureでDOM変換・slot照合・音操作なしを検証しています。アプリ内の実アカウント接続から取得まで、背景での再取得、オフライン位置のPIN認証は未確認です。fixtureの成功を実アカウントの成功に数えないでください。
 
 ## 描画
 
 `MapStyles` が標準／航空写真／ハイブリッドと明暗を生成します。`GlassScene` はMapLibreのSurfaceViewをPixelCopyで最大幅640pxへ直接縮小して取り込み、ワーカースレッドでぼかします。TextureViewでは縮小済みgetBitmap、取得できない場合は従来のmap.snapshotへフォールバックします。全解像度のCPU画像を毎回割り当てる経路を通常は通りません。Android 13以降ではAGSLで屈折・彩度・縁のハイライトを追加して描画します。それ以前はぼかし画像と色の重ね合わせへフォールバックします。UI文字列は背景画像に混ぜません。Apple固有のレンダラー・画像・SF Symbolsは使用していません。
+
+移動中の更新はChoreographerのVsync通知で進み、120Hzなら通知間隔は約8.3msです。`MapFrameRate` が同じ解像度で使える高リフレッシュレートを要求し、MapLibreの60fps上限もその値に合わせます。OSの省電力・温度制御による制限は尊重します。固定140msの移動中制限はありません。取り込みとぼかしは1枚だけを処理し、完了前の要求をキューに溜めません。
+
+`GlassScene` は保存画像の地理的な4点と現在の地図投影から変換を作り、新しい画像を待つ間も背景の位置・倍率・回転・傾きを毎フレーム合わせます。AGSLと従来Canvasの両方へ適用します。移動中は最大320px幅と対応するぼかし半径で処理量を減らし、停止後に640pxへ仕上げます。静止中はフレームコールバックと高リフレッシュ要求を解除します。Vsyncの目標と、実際に完成できた新規画像数・GPU使用率は区別してください。
 
 ## 画面・言語
 
@@ -132,6 +144,23 @@ adb -s emulator-5556 shell am instrument -w \
 ```
 
 `NativeFeaturesTest` の位置データは明示的なテストfixtureです。実アカウントの人・持ち物の取得確認には数えません。位置・所有者名・認証情報をログやコミットへ含めないでください。
+
+### 実際のR8リリースAPKの認証検証
+
+`verification` はAndroid 11以降で使う独立したオプトインのテストドライバーです。製品APKのKotlin/AndroidXがR8で削除・改名されても、テスト自身の依存関係で動作します。配布APKには含めません。`FINDBRIDGE_SIGNING_PROPERTIES` を設定し、対象のリリースAPKと同じ鍵で署名してください。
+
+```bash
+./gradlew :app:assembleRelease :verification:assembleDebug :verification:lintDebug
+adb -s DEVICE install -r app/build/outputs/apk/release/app-release.apk
+adb -s DEVICE install -r verification/build/outputs/apk/debug/verification-debug.apk
+adb -s DEVICE shell am instrument -w \
+  -e releaseauth true -e keyboard true -e interrupt true -e retry true \
+  -e class dev.findbridge.verification.ReleaseLoginLiveTest \
+  dev.findbridge.verification/androidx.test.runner.AndroidJUnitRunner
+adb -s DEVICE uninstall dev.findbridge.verification
+```
+
+所有者が保存済みの暗号化ログイン情報を持つ端末だけで実行します。パスワードをテスト引数へ渡しません。実際のネイティブタッチ、ソフトキーボード、キャンセル後の再接続、10秒間のフォーカス中断を検証します。`-e completedField FIELD` には、同じAPKのR8 mappingにある `LoginActivity.completed` の改名先を指定でき、終了だけでなく成功状態も確認できます。実際の接続操作でローカルの旧セッションを破棄して再認証します。端末をアンインストールして保存情報を失わせないでください。確認コードが必要なら所有者の操作を待ちます。
 
 GitHub Actionsはdebug/releaseのビルド、Lint、単体テストを実行します。CIには署名鍵とAppleの認証情報を置きません。署名済みAPKは非公開GitHub Releasesで配布します。エミュレータ・認証・地図の実表示はローカルの[検証記録](../VERIFICATION.md)を参照してください。
 

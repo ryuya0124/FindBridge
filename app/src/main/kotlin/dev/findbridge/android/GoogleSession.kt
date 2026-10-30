@@ -209,12 +209,7 @@ internal class GoogleSession private constructor(context: Context) {
         onPage = null
         onVerification = null
         // A completed native handoff does not leave a second, hidden map rendering.
-        if (
-            snapshot?.let {
-                runCatching { JSONObject(it).optBoolean("complete") }.getOrDefault(false)
-            } != false
-        )
-            destroyWeb()
+        destroyWeb()
     }
 
     fun refresh(index: Int) {

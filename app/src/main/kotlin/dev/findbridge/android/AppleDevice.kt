@@ -32,6 +32,9 @@ internal data class AppleDevice(
     val located: Boolean
         get() = latitude != null && longitude != null
 
+    val canPlaySound: Boolean
+        get() = provider == DeviceProvider.APPLE && !kind.contains("pencil", true)
+
     enum class State {
         LOCATION_OFF,
         NO_LOCATION,

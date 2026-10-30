@@ -1,6 +1,7 @@
 package dev.findbridge.android
 
 import android.os.SystemClock
+import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -25,7 +26,15 @@ class AppleAuthVariantsTest {
 
     @Test fun continueInsideNestedAppleFramesReachesTheMainWebViewSafely() = runVariant("nested")
 
-    private fun runVariant(variant: String) {
+    @Test fun onlyRequiredVerificationRevealsTheOfficialPage() = runVariant("verification")
+
+    @Test
+    fun accountSubmissionResumesAfterFocusIsLostForMoreThanFourSeconds() =
+        runVariant("continue", true)
+
+    @Test fun nestedFrameSubmissionResumesAfterFocusReturns() = runVariant("nested", true)
+
+    private fun runVariant(variant: String, interruptFocus: Boolean = false) {
         ActivityScenario.launch(AuthActivity::class.java).use { scenario ->
             lateinit var web: WebView
             scenario.onActivity { activity ->
@@ -59,7 +68,13 @@ class AppleAuthVariantsTest {
                                         fixture("continue")
                                             .replace(
                                                 "<script>",
-                                                "<script>setInterval(()=>parent.postMessage({type:'fixture-state',state:document.body.dataset.state},'https://idmsa.apple.com'),100);",
+                                                """<script>
+                                                const report=()=>parent.postMessage({type:'fixture-state',state:document.body.dataset.state},'https://idmsa.apple.com');
+                                                new MutationObserver(report).observe(document.body,{subtree:true,attributes:true,childList:true});
+                                                for(const name of ['findbridge.auth.result','findbridge.auth.resume','findbridge.auth.suspend','keydown','keyup','click'])
+                                                  addEventListener(name,e=>parent.postMessage({type:'fixture-debug',event:name,target:e.target?.tagName,status:e.detail?.status,reason:e.detail?.reason},'https://idmsa.apple.com'),true);
+                                                report();
+                                                """,
                                             )
                                 }
                             return WebResourceResponse(
@@ -74,14 +89,36 @@ class AppleAuthVariantsTest {
                     .getDeclaredMethod("installAutomaticLogin", SavedLogin::class.java)
                     .apply { isAccessible = true }
                     .invoke(activity, SavedLogin("fixture@example.invalid", "fixture-password"))
+                assertEquals(
+                    View.VISIBLE,
+                    activity.findViewById<View>(AuthActivity.AUTO_STATUS_ID).visibility,
+                )
+                assertEquals(
+                    View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS,
+                    web.importantForAutofill,
+                )
+                assertEquals(
+                    View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS,
+                    web.importantForAccessibility,
+                )
                 web.loadUrl(
                     if (variant == "nested") "https://www.icloud.com/find"
                     else "https://idmsa.apple.com/appleauth/auth/authorize/signin"
                 )
+                if (interruptFocus) {
+                    val overlay =
+                        android.app.AlertDialog.Builder(activity)
+                            .setTitle("Focus interruption fixture")
+                            .setMessage("Synthetic confirmation window")
+                            .setCancelable(false)
+                            .show()
+                    web.postDelayed({ overlay.dismiss() }, 10_000)
+                }
             }
             val deadline = SystemClock.uptimeMillis() + 25000
             var state = ""
-            while (state != "\"done\"" && SystemClock.uptimeMillis() < deadline) {
+            val expected = if (variant == "verification") "\"verification\"" else "\"done\""
+            while (state != expected && SystemClock.uptimeMillis() < deadline) {
                 val read = CountDownLatch(1)
                 scenario.onActivity {
                     web.evaluateJavascript("document.body.dataset.state || ''") {
@@ -97,18 +134,47 @@ class AppleAuthVariantsTest {
                 SystemClock.sleep(150)
             }
             assertEquals(
-                "The $variant Apple form must complete without manual taps",
-                "\"done\"",
+                "The $variant Apple form must complete without manual taps ${diagnostics(scenario, web)}",
+                expected,
                 state,
             )
+            if (variant == "verification") {
+                var revealed = false
+                val revealUntil = SystemClock.uptimeMillis() + 3000
+                while (!revealed && SystemClock.uptimeMillis() < revealUntil) {
+                    scenario.onActivity {
+                        revealed =
+                            it.findViewById<View>(AuthActivity.AUTO_STATUS_ID).visibility ==
+                                View.GONE
+                    }
+                    SystemClock.sleep(50)
+                }
+                assertTrue("Only required verification exposes the official input page", revealed)
+            }
         }
+    }
+
+    private fun diagnostics(scenario: ActivityScenario<AuthActivity>, web: WebView): String {
+        var metadata = ""
+        val read = CountDownLatch(1)
+        scenario.onActivity {
+            web.evaluateJavascript("JSON.stringify(window.fixtureDebug || [])") {
+                metadata = it
+                read.countDown()
+            }
+        }
+        read.await(2, TimeUnit.SECONDS)
+        return metadata
     }
 
     private fun wrapper(child: String, parent: String?): String =
         """
         <!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
         <body><iframe src="$child" style="margin:18px 10px;width:calc(100% - 24px);height:620px;border:0"></iframe>
-        <script>addEventListener('message', e=>{if(e.data?.type==='fixture-state'){
+        <script>window.fixtureDebug=[];addEventListener('message',e=>{if(e.data?.type==='fixture-debug'){
+            window.fixtureDebug.push(e.data);if(window.fixtureDebug.length>24)window.fixtureDebug.shift();
+            ${if(parent == null) "" else "window.parent.postMessage(e.data,'$parent');"}
+        }});addEventListener('message', e=>{if(e.data?.type==='fixture-state'){
             document.body.dataset.state=e.data.state;
             ${if(parent == null) "" else "window.parent.postMessage(e.data,'$parent');"}
         }});</script></body>
@@ -130,6 +196,7 @@ class AppleAuthVariantsTest {
               if(document.body.dataset.state==='account'){
                 if(document.querySelector('input[type=email]').value!=='fixture@example.invalid'){document.body.dataset.state='bad-account';return;}
                 if(document.querySelector('input[type=password]').value){document.body.dataset.state='bad-order';return;}
+                ${if(variant=="verification") "document.body.dataset.state='verification';document.querySelector('#secret').style.display='block';document.querySelector('#secret').innerHTML='<input autocomplete=one-time-code>';return;" else ""}
                 document.body.dataset.state='password';document.querySelector('input[type=email]').readOnly=true;
                 document.querySelector('#secret').style.display='block';
               } else if(document.body.dataset.state==='password') {

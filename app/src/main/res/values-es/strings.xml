@@ -41,7 +41,6 @@
     <string name="official_auth">La autenticación usa la página oficial de Apple</string>
     <string name="back_to_list">Volver a la lista</string>
     <string name="play_sound">Reproducir sonido</string>
-    <string name="sound_disabled">Sonido desactivado</string>
     <string name="sound_disabled_accessibility">Reproducir sonido, desactivado</string>
     <string name="directions">Cómo llegar</string>
     <string name="open_maps">Abrir en Mapas</string>
@@ -127,4 +126,10 @@
     <string name="google_auth_help">Introduce tu contraseña o verificación en la pantalla oficial de Google si se solicita.</string>
     <string name="google_sign_in_needed">Vuelve a iniciar sesión en Google para actualizar las ubicaciones de Android.</string>
     <string name="google_source">Ubicación de Google Find Hub. Las ubicaciones sin conexión pueden requerir verificación de Google.</string>
+    <string name="signing_in">Iniciando sesión…</string>
+    <string name="sound_confirmation">¿Reproducir un sonido en %1$s?</string>
+    <string name="sound_action_help">Reproducir en este dispositivo</string>
+    <string name="sound_connection_unavailable">No disponible con esta conexión</string>
+    <string name="sound_request_sent">Solicitud de sonido enviada</string>
+    <string name="sound_request_unknown">No se pudo confirmar el resultado de la solicitud</string>
 </resources>

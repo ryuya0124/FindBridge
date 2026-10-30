@@ -41,7 +41,6 @@
     <string name="official_auth">認証にはAppleの公式画面を使用します</string>
     <string name="back_to_list">一覧に戻る</string>
     <string name="play_sound">サウンドを再生</string>
-    <string name="sound_disabled">サウンドは無効</string>
     <string name="sound_disabled_accessibility">サウンドを再生、現在は無効</string>
     <string name="directions">経路</string>
     <string name="open_maps">マップで開く</string>
@@ -121,4 +120,10 @@
     <string name="google_auth_help">パスワードや本人確認が必要な場合は、Googleの公式画面で入力してください。</string>
     <string name="google_sign_in_needed">Androidの位置を更新するには、Googleに再接続してください。</string>
     <string name="google_source">位置情報の取得元：Google Find Hub。オフラインの位置にはGoogleの本人確認が必要な場合があります。</string>
+    <string name="signing_in">ログイン中…</string>
+    <string name="sound_confirmation">「%1$s」でサウンドを再生しますか？</string>
+    <string name="sound_action_help">このデバイスで再生</string>
+    <string name="sound_connection_unavailable">この接続では利用できません</string>
+    <string name="sound_request_sent">サウンドの再生を要求しました</string>
+    <string name="sound_request_unknown">サウンド要求の結果を確認できませんでした</string>
 </resources>

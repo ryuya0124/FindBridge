@@ -69,6 +69,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private lateinit var locationSync: LocationSyncRepository
     private lateinit var appearance: AppearanceSettings
     private lateinit var glass: GlassScene
+    private lateinit var frameRate: MapFrameRate
     private lateinit var root: FrameLayout
     private lateinit var mapView: MapView
     private var map: MapLibreMap? = null
@@ -179,6 +180,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             }
         root.addView(selectedPin, FrameLayout.LayoutParams(dp(66), dp(74)))
         glass = GlassScene(mapView).apply { intensity = appearance.glassIntensity }
+        frameRate = MapFrameRate(this, mapView)
         mapView.getMapAsync { value ->
             map = value
             value.uiSettings.apply {
@@ -202,11 +204,19 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 fitted = true
             } else value.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(36.2, 138.2), 4.5))
             applyMapStyle()
+            value.addOnCameraMoveStartedListener {
+                frameRate.setMoving(true)
+                glass.startTracking(value)
+            }
             value.addOnCameraMoveListener {
-                glass.capture(value)
                 positionSelectedPin()
             }
-            value.addOnCameraIdleListener { glass.capture(value, immediate = true) }
+            value.addOnCameraIdleListener {
+                glass.stopTracking()
+                glass.trackCamera(value)
+                frameRate.setMoving(false)
+                glass.capture(value, immediate = true)
+            }
             mapView.addOnDidBecomeIdleListener { glass.capture(value, immediate = true) }
             value.setOnMarkerClickListener { marker ->
                 markers[marker]?.let(::select)
@@ -1157,14 +1167,38 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 actionTile(
                         "◖))",
                         getString(R.string.play_sound),
-                        getString(R.string.sound_disabled),
+                        getString(
+                            if (device.canPlaySound) R.string.sound_action_help
+                            else R.string.sound_connection_unavailable
+                        ),
                         0xff6052de.toInt(),
                     )
                     .apply {
                         id = SOUND_ID
-                        isEnabled = false
-                        alpha = .5f
-                        contentDescription = getString(R.string.sound_disabled_accessibility)
+                        isEnabled = device.canPlaySound && !repository.sendingSound
+                        alpha = if (isEnabled) 1f else .5f
+                        contentDescription =
+                            getString(
+                                if (device.canPlaySound) R.string.play_sound
+                                else R.string.sound_disabled_accessibility
+                            )
+                        setOnClickListener {
+                            SoundConfirmation.show(
+                                this@MainActivity,
+                                device.displayName(this@MainActivity),
+                            ) {
+                                if (this@MainActivity.foreground)
+                                    repository.playSound(device.id) { accepted ->
+                                        Toast.makeText(
+                                                this@MainActivity,
+                                                if (accepted) R.string.sound_request_sent
+                                                else R.string.sound_request_unknown,
+                                                Toast.LENGTH_LONG,
+                                            )
+                                            .show()
+                                    }
+                            }
+                        }
                     },
                 LinearLayout.LayoutParams(0, dp(110), 1f),
             )
@@ -1613,6 +1647,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     override fun onStart() {
         super.onStart()
         mapView.onStart()
+        frameRate.start()
         windowAdapter =
             WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this)).also {
                 it.addWindowLayoutInfoListener(this, mainExecutor, foldListener)
@@ -1631,6 +1666,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onPause() {
+        glass.stopTracking()
+        frameRate.setMoving(false)
         foreground = false
         google.setForeground(false)
         handler.removeCallbacks(periodicRefresh)
@@ -1640,6 +1677,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onStop() {
+        frameRate.stop()
         windowAdapter?.removeWindowLayoutInfoListener(foldListener)
         windowAdapter = null
         mapView.onStop()
