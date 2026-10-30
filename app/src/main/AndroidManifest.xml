@@ -14,8 +14,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FindBridge"
         android:usesCleartextTraffic="false">
+        <provider android:name=".GoogleIdentityProvider" android:authorities="${applicationId}.googleidentity" android:exported="false" />
         <activity android:name=".GoogleAuthActivity" android:exported="false"
-            android:process=":google" android:windowSoftInputMode="adjustResize"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+        <activity android:name=".GoogleWebSessionActivity" android:exported="false" android:process=":google"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
         <service android:name=".GoogleLocationService" android:exported="false" android:process=":google" />
         <activity android:name=".LoginActivity" android:exported="false"

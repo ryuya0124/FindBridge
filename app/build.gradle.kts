@@ -73,6 +73,7 @@ kotlin {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     implementation("androidx.dynamicanimation:dynamicanimation:1.1.0")
     implementation("androidx.window:window-java:1.5.1")
     implementation("androidx.webkit:webkit:1.18.0")

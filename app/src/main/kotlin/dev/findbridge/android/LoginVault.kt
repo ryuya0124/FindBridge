@@ -57,8 +57,13 @@ internal class LoginVault(context: Context, namespace: String = "apple_credentia
         policy.edit().putLong("attemptedAt", System.currentTimeMillis()).apply()
     }
 
-    fun markSuccess() {
+    fun markAuthenticated() {
         policy.edit().putBoolean("paused", false).apply()
+    }
+
+    /** A completed native refresh ends the retry window of the preceding sign-in. */
+    fun markSuccess() {
+        policy.edit().putBoolean("paused", false).putLong("attemptedAt", 0L).apply()
     }
 
     fun pause() {

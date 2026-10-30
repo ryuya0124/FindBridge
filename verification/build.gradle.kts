@@ -36,6 +36,7 @@ android {
 kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 } }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.21")
     implementation("androidx.test:runner:1.7.0")
     implementation("androidx.test:core:1.7.0")

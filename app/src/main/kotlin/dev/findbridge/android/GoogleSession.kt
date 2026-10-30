@@ -24,6 +24,7 @@ internal class GoogleSession private constructor(context: Context) {
     private var web: WebView? = null
     private var attached = false
     private var requestedIndex = -1
+    private var refreshAfterDetach: Int? = null
     var snapshot: String? = null
         private set
 
@@ -31,6 +32,33 @@ internal class GoogleSession private constructor(context: Context) {
     var onError: (() -> Unit)? = null
     var onPage: ((String) -> Unit)? = null
     var onVerification: ((Boolean) -> Unit)? = null
+    var onBlockedNavigation: ((String, String) -> Unit)? = null
+
+    private fun debugPage(view: WebView, stage: String) {
+        if (!BuildConfig.DEBUG) return
+        val uri = android.net.Uri.parse(view.url.orEmpty())
+        val route =
+            uri.path
+                .orEmpty()
+                .replace(
+                    Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE),
+                    "<account>",
+                )
+                .take(200)
+        val state =
+            JSONObject().put("stage", stage).put("host", uri.host.orEmpty()).put("path", route)
+        java.io.File(app.filesDir, "google-web-state.json").writeText(state.toString())
+        if (stage != "finished") return
+        view.evaluateJavascript(
+            "JSON.stringify({ready:document.readyState,reader:!!window.FindBridgeGoogleReader,indexedButtons:document.querySelectorAll('[role=button][data-index]').length,avatarHasEmail:!!document.querySelector('[aria-label*=\"@\"][role=button],button[aria-label*=\"@\"],a[aria-label*=\"@\"]'),markerSlots:document.querySelectorAll('[data-location-lat][data-location-lng][data-slot-id]').length})"
+        ) { encoded ->
+            runCatching {
+                state.put("dom", JSONObject(org.json.JSONTokener(encoded).nextValue().toString()))
+                java.io.File(app.filesDir, "google-web-state.json").writeText(state.toString())
+            }
+        }
+    }
+
     private val timeout = Runnable {
         onError?.invoke()
         if (!attached) destroyWeb()
@@ -125,6 +153,30 @@ internal class GoogleSession private constructor(context: Context) {
                     if (!attached) handler.post { destroyWeb() }
                 }
             }
+            WebViewCompat.addWebMessageListener(
+                view,
+                "FindBridgeGoogleAuthState",
+                setOf("https://accounts.google.com"),
+            ) { _, message, origin, mainFrame, _ ->
+                if (
+                    mainFrame &&
+                        origin.toString().trimEnd('/') == "https://accounts.google.com" &&
+                        android.net.Uri.parse(view.url.orEmpty()).host == "accounts.google.com" &&
+                        message.data == "verification"
+                ) {
+                    handler.removeCallbacks(timeout)
+                    if (attached) onVerification?.invoke(true)
+                    else {
+                        onError?.invoke()
+                        handler.post { destroyWeb() }
+                    }
+                }
+            }
+            WebViewCompat.addDocumentStartJavaScript(
+                view,
+                app.assets.open("google-auth-state.js").bufferedReader().use { it.readText() },
+                setOf("https://accounts.google.com"),
+            )
             val script =
                 app.assets
                     .open("google-devices.js")
@@ -138,8 +190,40 @@ internal class GoogleSession private constructor(context: Context) {
                     override fun shouldOverrideUrlLoading(
                         view: WebView,
                         request: WebResourceRequest,
-                    ): Boolean =
-                        request.isForMainFrame && !GoogleProtocol.isPage(request.url.toString())
+                    ): Boolean {
+                        val blocked =
+                            request.isForMainFrame && !GoogleProtocol.isPage(request.url.toString())
+                        if (blocked && BuildConfig.DEBUG) {
+                            val uri = request.url
+                            java.io
+                                .File(app.filesDir, "google-web-blocked.json")
+                                .writeText(
+                                    JSONObject()
+                                        .put("host", uri.host.orEmpty())
+                                        .put(
+                                            "path",
+                                            uri.path
+                                                .orEmpty()
+                                                .replace(
+                                                    Regex(
+                                                        "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}",
+                                                        RegexOption.IGNORE_CASE,
+                                                    ),
+                                                    "<account>",
+                                                )
+                                                .take(200),
+                                        )
+                                        .toString()
+                                )
+                        }
+                        if (blocked && BuildConfig.DEBUG)
+                            onBlockedNavigation?.invoke(
+                                request.url.host.orEmpty(),
+                                request.url.path.orEmpty(),
+                            )
+                        if (blocked) onError?.invoke()
+                        return blocked
+                    }
 
                     override fun onPageStarted(
                         view: WebView,
@@ -147,7 +231,14 @@ internal class GoogleSession private constructor(context: Context) {
                         favicon: android.graphics.Bitmap?,
                     ) {
                         loadFailed = false
+                        debugPage(view, "started")
                         handler.removeCallbacks(timeout)
+                        if (!GoogleProtocol.isPage(url)) {
+                            loadFailed = true
+                            view.stopLoading()
+                            onError?.invoke()
+                            return
+                        }
                         if (GoogleProtocol.isDataPage(url)) handler.postDelayed(timeout, 100_000)
                         onPage?.invoke(url)
                         if (!attached && !GoogleProtocol.isDataPage(url)) {
@@ -159,6 +250,7 @@ internal class GoogleSession private constructor(context: Context) {
 
                     override fun onPageFinished(view: WebView, url: String) {
                         if (loadFailed) return
+                        debugPage(view, "finished")
                         CookieManager.getInstance().flush()
                         onPage?.invoke(url)
                         if (GoogleProtocol.isDataPage(url))
@@ -195,7 +287,9 @@ internal class GoogleSession private constructor(context: Context) {
         wrapper?.baseContext = context
         (view.parent as? ViewGroup)?.removeView(view)
         view.onResume()
-        if (view.url == null) view.loadUrl(GoogleProtocol.FIND_URL)
+        // Retrying a failed navigation reloads the entry point while preserving
+        // the owner's private cookies and completed verification.
+        view.loadUrl(GoogleProtocol.FIND_URL)
         return view
     }
 
@@ -208,11 +302,22 @@ internal class GoogleSession private constructor(context: Context) {
         wrapper?.baseContext = app
         onPage = null
         onVerification = null
+        onBlockedNavigation = null
         // A completed native handoff does not leave a second, hidden map rendering.
         destroyWeb()
+        refreshAfterDetach?.let { index ->
+            refreshAfterDetach = null
+            refresh(index)
+        }
     }
 
     fun refresh(index: Int) {
+        // The parent can resume and bind before the finishing auth Activity is
+        // destroyed. Start its refresh after that Activity releases its WebView.
+        if (attached) {
+            refreshAfterDetach = index
+            return
+        }
         requestedIndex = index
         handler.removeCallbacks(timeout)
         handler.postDelayed(timeout, 100_000)
@@ -224,6 +329,7 @@ internal class GoogleSession private constructor(context: Context) {
     }
 
     fun stop() {
+        refreshAfterDetach = null
         handler.removeCallbacks(timeout)
         if (!attached) destroyWeb()
     }

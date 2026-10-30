@@ -126,4 +126,12 @@
     <string name="sound_connection_unavailable">이 연결에서는 사용할 수 없음</string>
     <string name="sound_request_sent">사운드 재생을 요청했습니다</string>
     <string name="sound_request_unknown">사운드 요청 결과를 확인할 수 없습니다</string>
+    <string name="google_choose_account">Google 계정 선택</string>
+    <string name="google_gms_help">이 기기의 Google 계정으로 연결합니다. 추가 확인이 필요하면 Google 공식 화면에서 진행하세요.</string>
+    <string name="google_gms_connecting">Google에 연결 중…</string>
+    <string name="google_gms_unavailable">Google Play 서비스가 필요합니다. 업데이트하거나 사용 설정한 후 다시 시도하세요.</string>
+    <string name="google_gms_configuration">Google 연결을 위해 앱의 패키지 이름과 서명을 등록해야 합니다.</string>
+    <string name="google_gms_scope_unavailable">Google이 이 앱의 Find Hub 접근을 허용하지 않았습니다. 현재 Android 위치를 가져올 수 없습니다.</string>
+    <string name="google_gms_failed">Google에 연결할 수 없습니다. 네트워크를 확인한 후 다시 시도하세요.</string>
+    <string name="google_signed_in">Google에 로그인했습니다. Android 기기를 표시하려면 Find Hub 연결을 완료하세요.</string>
 </resources>

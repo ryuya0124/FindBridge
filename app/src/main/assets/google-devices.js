@@ -1,14 +1,14 @@
 (() => {
     "use strict";
-    if (location.origin !== "https://www.google.com" || !/^\/android\/find\/?$/.test(location.pathname)) return;
+    if (location.origin !== "https://www.google.com" || !/^\/android\/find(?:\/u\/[0-9]{1,3})?\/?$/.test(location.pathname)) return;
     if (window.top !== window || window.FindBridgeGoogleReader) return;
     const records = new Map();
     let queue = [], current = null, serial = "", running = false, scheduled = false;
     let deviceWatchdog = null, cycleWatchdog = null, expiredDevice = false;
     let waitingForCatalog = false, requestedIndex = __FINDBRIDGE_GOOGLE_INITIAL_INDEX__;
-    let automating = false, lastDialog = false;
+    let automating = false, lastDialog = false, backRequested = false;
     const visible = e => e && e.getClientRects().length && getComputedStyle(e).visibility !== "hidden";
-    const dialog = () => [...document.querySelectorAll('[role="dialog"],[aria-modal="true"],dialog[open]')].find(visible);
+    const dialog = () => [...document.querySelectorAll('[role="dialog"],[role="alertdialog"],[aria-modal="true"],dialog[open]')].find(visible);
     const state = () => { try { FindBridgeGoogleState.postMessage(dialog() ? "verification" : "loading"); } catch (_) {} };
     // The official verification/consent dialog remains interactive. Find Hub's remote
     // controls never receive owner input, including while the native cover changes state.
@@ -38,7 +38,9 @@
     const schedule = () => {
         if (scheduled) return;
         scheduled = true;
-        requestAnimationFrame(() => { scheduled = false; tick(); });
+        // The bound refresh has no visible Window. DOM work must not depend on
+        // requestAnimationFrame, which Chromium can suspend in that state.
+        queueMicrotask(() => { scheduled = false; tick(); });
     };
     const armDeviceWatchdog = () => {
         clearTimeout(deviceWatchdog);
@@ -92,7 +94,7 @@
         }
         if (prompt) return;
         const {buttons, settled} = read();
-        if (!running) return;
+        if (!running) { emit(true); return; }
         if (waitingForCatalog) {
             if (!buttons.length) return;
             queue = requestedIndex >= 0 ? [requestedIndex] : buttons.map(e => Number(e.dataset.index));
@@ -106,9 +108,10 @@
         if (!queue.length && records.size) { running = false; clearTimeout(cycleWatchdog); emit(true); return; }
         if (!buttons.length) {
             const back = control('Back');
-            if (back) click(back);
+            if (back && !backRequested) { backRequested = true; click(back); }
             emit(false); return;
         }
+        backRequested = false;
         const next = queue.shift();
         const target = buttons.find(e => Number(e.dataset.index) === next);
         if (target) { current = next; expiredDevice = false; armDeviceWatchdog(); click(target); }
@@ -122,7 +125,7 @@
             waitingForCatalog = !buttons.length && !records.size;
             queue = index >= 0 ? [index] : buttons.map(e => Number(e.dataset.index));
             clearTimeout(deviceWatchdog); expiredDevice = false;
-            current = null; running = true; serial = "";
+            current = null; running = true; serial = ""; backRequested = false;
             armCycleWatchdog();
             if (!queue.length && records.size) queue = [...records.keys()];
             tick();
@@ -133,6 +136,7 @@
     // Start only after the authenticated device catalog has appeared.
     let begun = false;
     const changed = () => {
+        if (document.readyState === 'loading') return;
         if (!begun && list().length) { begun = true; window.FindBridgeGoogleReader.start(requestedIndex); }
         else schedule();
     };

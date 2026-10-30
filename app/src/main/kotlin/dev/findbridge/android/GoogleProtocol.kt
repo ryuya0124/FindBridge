@@ -20,7 +20,7 @@ internal object GoogleProtocol {
         val u = Uri.parse(address)
         isPage(address) &&
             u.host == "www.google.com" &&
-            u.path.orEmpty().trimEnd('/') == "/android/find"
+            u.path.orEmpty().matches(Regex("/android/find(?:/u/[0-9]{1,3})?/?"))
     }
         .getOrDefault(false)
 
@@ -31,8 +31,12 @@ internal object GoogleProtocol {
             (u.port == -1 || u.port == 443) &&
             (u.host == "accounts.google.com" ||
                 u.host == "myaccount.google.com" ||
+                (u.host == "accounts.youtube.com" &&
+                    u.path in setOf("/accounts/SetSID", "/accounts/CheckCookie")) ||
                 (u.host == "www.google.com" &&
-                    u.path.orEmpty().trimEnd('/') in setOf("/android/find", "/android/find/about")))
+                    (u.path.orEmpty().matches(Regex("/android/find(?:/u/[0-9]{1,3})?/?")) ||
+                        u.path.orEmpty().trimEnd('/') == "/android/find/about" ||
+                        u.path in setOf("/accounts/SetSID", "/accounts/CheckCookie"))))
     }
         .getOrDefault(false)
 

@@ -94,6 +94,9 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private var accountTab = false
     private var activeTab = 1
     private var fitted = false
+    private var mapStyleGeneration = 0
+    private var mapStyleRequested = false
+    private var rememberOverviewZoom = false
     private var restoredCamera: DoubleArray? = null
     private var topInset = 0
     private var bottomInset = 0
@@ -204,7 +207,12 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 fitted = true
             } else value.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(36.2, 138.2), 4.5))
             applyMapStyle()
-            value.addOnCameraMoveStartedListener {
+            value.addOnCameraMoveStartedListener { reason ->
+                if (
+                    reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE &&
+                        selectedId == null
+                )
+                    rememberOverviewZoom = true
                 frameRate.setMoving(true)
                 glass.startTracking(value)
             }
@@ -212,6 +220,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 positionSelectedPin()
             }
             value.addOnCameraIdleListener {
+                if (rememberOverviewZoom) {
+                    rememberOverviewZoom = false
+                    appearance.overviewZoom = value.cameraPosition.zoom
+                }
                 glass.stopTracking()
                 glass.trackCamera(value)
                 frameRate.setMoving(false)
@@ -335,14 +347,17 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     private fun applyMapStyle() {
         val current = map ?: return
+        val preserveCamera = mapStyleRequested
+        mapStyleRequested = true
+        val generation = ++mapStyleGeneration
         mapButton.symbol =
             if (appearance.mapMode == MapMode.STANDARD) MapControlButton.Symbol.MAP
             else MapControlButton.Symbol.SATELLITE
         mapButton.invalidate()
-        fitted = false
         current.setStyle(
             Style.Builder().fromJson(MapStyles.create(this, appearance.mapMode, Ui.dark))
         ) {
+            if (generation != mapStyleGeneration) return@setStyle
             current.clear()
             markers.clear()
             markerById.clear()
@@ -352,9 +367,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 restoredCamera = null
                 fitted = true
                 layoutSheet(updateCamera = true)
-            } else if (selectedId != null)
-                selected()?.let { focusDevice(it, sheetHeight.toFloat()) }
-            else fitDevices()
+            } else if (!preserveCamera) {
+                if (selectedId != null) selected()?.let { focusDevice(it, sheetHeight.toFloat()) }
+                else fitDevices()
+            }
             glass.capture(current, immediate = true)
             if (::attribution.isInitialized)
                 attribution.text =
@@ -1295,7 +1311,11 @@ class MainActivity : Activity(), AppleRepository.Listener {
         content.addView(
             label(
                 getString(
-                    if (google.connected) R.string.google_connected else R.string.google_help
+                    when {
+                        google.connected -> R.string.google_connected
+                        google.signedIn -> R.string.google_signed_in
+                        else -> R.string.google_help
+                    }
                 ),
                 13,
                 Ui.muted,
@@ -1309,7 +1329,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             },
             LinearLayout.LayoutParams(-1, dp(50)),
         )
-        if (google.connected) {
+        if (google.connected || google.signedIn) {
             space(content, 8)
             content.addView(
                 actionButton(getString(R.string.google_disconnect), false).apply {
@@ -1357,20 +1377,20 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun connectGoogle() {
-        startActivityForResult(Intent(this, GoogleAuthActivity::class.java), 30)
+        startActivityForResult(
+            Intent(
+                this,
+                if (google.signedIn) GoogleWebSessionActivity::class.java
+                else GoogleAuthActivity::class.java,
+            ),
+            30,
+        )
     }
 
     private fun connect() {
         if (connecting) return
         if (loginVault.hasSaved && loginVault.automatic && !loginVault.paused) {
-            connecting = true
-            loginVault.markAttempt()
-            LoginVault.clearStaged()
-            repository.logout()
-            startActivityForResult(
-                Intent(this, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
-                10,
-            )
+            beginAutomaticAuthentication()
         } else editLogin()
     }
 
@@ -1383,18 +1403,31 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private fun maintainLogin() {
         if (
             !foreground ||
+                !hasWindowFocus() ||
                 connecting ||
                 (!repository.requiresSignIn && repository.hasSession) ||
                 !loginVault.automaticAllowed()
         )
             return
+        beginAutomaticAuthentication()
+    }
+
+    private fun beginAutomaticAuthentication() {
         connecting = true
-        loginVault.markAttempt()
         LoginVault.clearStaged()
-        startActivityForResult(
-            Intent(this, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
-            10,
-        )
+        // An expired native session can still leave the web app in a stale signed-in
+        // state. Reauthenticate only after CookieManager has actually cleared it.
+        repository.logout {
+            if (isFinishing || isDestroyed || !foreground || !hasWindowFocus()) {
+                connecting = false
+                return@logout
+            }
+            loginVault.markAttempt()
+            startActivityForResult(
+                Intent(this, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
+                10,
+            )
+        }
     }
 
     private fun accountMenu(anchor: View) {
@@ -1560,7 +1593,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 CameraUpdateFactory.newCameraPosition(
                     CameraPosition.Builder()
                         .target(points.first())
-                        .zoom(14.0)
+                        .zoom(appearance.overviewZoom)
                         .padding(
                             p.left.toDouble(),
                             p.top.toDouble(),
@@ -1569,14 +1602,22 @@ class MainActivity : Activity(), AppleRepository.Listener {
                         )
                         .build()
                 )
-            else
-                CameraUpdateFactory.newLatLngBounds(
-                    LatLngBounds.Builder().includes(points).build(),
-                    p.left,
-                    p.top,
-                    p.right,
-                    p.bottom,
-                )
+            else {
+                val bounds =
+                    CameraUpdateFactory.newLatLngBounds(
+                        LatLngBounds.Builder().includes(points).build(),
+                        p.left,
+                        p.top,
+                        p.right,
+                        p.bottom,
+                    )
+                val camera = bounds.getCameraPosition(current)
+                if (camera != null && camera.zoom > appearance.overviewZoom)
+                    CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder(camera).zoom(appearance.overviewZoom).build()
+                    )
+                else bounds
+            }
 
         if (NativeMotion.reduced(this)) current.moveCamera(update)
         else current.animateCamera(update, 650)
@@ -1664,6 +1705,11 @@ class MainActivity : Activity(), AppleRepository.Listener {
         repository.refresh()
         locationSync.refresh()
         handler.postDelayed(periodicRefresh, 30_000)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && ::loginVault.isInitialized) maintainLogin()
     }
 
     override fun onPause() {

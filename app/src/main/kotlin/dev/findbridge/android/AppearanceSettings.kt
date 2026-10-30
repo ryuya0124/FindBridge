@@ -47,6 +47,13 @@ internal class AppearanceSettings(context: Context) {
             prefs.edit().putBoolean("reduceMotion", value).apply()
         }
 
+    var overviewZoom: Double
+        get() = prefs.getFloat("overviewZoom", 14f).toDouble().coerceIn(2.0, 18.0)
+        set(value) {
+            if (value.isFinite())
+                prefs.edit().putFloat("overviewZoom", value.coerceIn(2.0, 18.0).toFloat()).apply()
+        }
+
     fun isDark(context: Context): Boolean =
         when (appearance) {
             Appearance.DARK -> true

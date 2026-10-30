@@ -126,4 +126,12 @@
     <string name="sound_connection_unavailable">此連線不支援此功能</string>
     <string name="sound_request_sent">已傳送播放聲音請求</string>
     <string name="sound_request_unknown">無法確認播放聲音請求的結果</string>
+    <string name="google_choose_account">選擇 Google 帳號</string>
+    <string name="google_gms_help">使用此裝置上的 Google 帳號連接。如需額外驗證，請在 Google 官方頁面完成。</string>
+    <string name="google_gms_connecting">正在連接 Google…</string>
+    <string name="google_gms_unavailable">需要 Google Play 服務。請更新或啟用後重試。</string>
+    <string name="google_gms_configuration">連接 Google 前，需要註冊此應用程式的套件名稱和簽章。</string>
+    <string name="google_gms_scope_unavailable">Google 尚未允許此應用程式存取 Find Hub。目前無法取得 Android 位置。</string>
+    <string name="google_gms_failed">無法連接 Google。請檢查網路後重試。</string>
+    <string name="google_signed_in">已登入 Google。請完成 Find Hub 連線以顯示 Android 裝置。</string>
 </resources>

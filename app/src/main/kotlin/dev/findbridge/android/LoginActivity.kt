@@ -42,6 +42,8 @@ class LoginActivity : Activity() {
     private var busy = false
     private var credentialGeneration = 0
     private var completed = false
+    private var resumed = false
+    private var pendingAuthGeneration: Int? = null
     private var posture: PostureObserver? = null
     private var fold: FoldRegion? = null
     private var layoutPane: () -> Unit = {}
@@ -260,13 +262,18 @@ class LoginActivity : Activity() {
                         }
                         password.text.clear()
                         existing = null
-                        AppleRepository.get(this).logout()
-                        @Suppress("DEPRECATION")
-                        startActivityForResult(
-                            Intent(this, AuthActivity::class.java)
-                                .putExtra(AuthActivity.USE_LOGIN, true),
-                            10,
-                        )
+                        AppleRepository.get(this).logout {
+                            if (
+                                isFinishing ||
+                                    isDestroyed ||
+                                    requestGeneration != credentialGeneration
+                            ) {
+                                LoginVault.clearStaged()
+                                return@logout
+                            }
+                            pendingAuthGeneration = requestGeneration
+                            launchPendingAuthentication()
+                        }
                     }
                 }
                 .onFailure {
@@ -312,7 +319,36 @@ class LoginActivity : Activity() {
         }
     }
 
+    private fun launchPendingAuthentication() {
+        val generation = pendingAuthGeneration ?: return
+        if (!resumed || !hasWindowFocus() || isFinishing || isDestroyed) return
+        pendingAuthGeneration = null
+        if (generation != credentialGeneration) return
+        @Suppress("DEPRECATION")
+        startActivityForResult(
+            Intent(this, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
+            10,
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+        launchPendingAuthentication()
+    }
+
+    override fun onPause() {
+        resumed = false
+        super.onPause()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) launchPendingAuthentication()
+    }
+
     override fun onDestroy() {
+        pendingAuthGeneration = null
         existing = null
         if (isFinishing && busy && !completed) {
             vault.pause()

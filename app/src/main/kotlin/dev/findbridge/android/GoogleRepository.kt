@@ -17,6 +17,13 @@ import org.json.JSONObject
 internal class GoogleRepository private constructor(context: Context) {
     private val app = context.applicationContext
     private val store = SecureSessionStore(app, "google_connection")
+    private val identityStore = SecureSessionStore(app, "google_identity")
+    private val main = Handler(Looper.getMainLooper())
+    private val restoredIdentity = identityStore.load()
+    private var verifiedAccount = restoredIdentity?.optString("account").orEmpty()
+    var signedIn = restoredIdentity?.optBoolean("verified", false) == true
+        private set
+
     private val worker = Executors.newSingleThreadExecutor()
     private val listeners = mutableSetOf<AppleRepository.Listener>()
     private var endpoint: Messenger? = null
@@ -26,7 +33,12 @@ internal class GoogleRepository private constructor(context: Context) {
     private var clearing = false
     private var lastRefresh = 0L
     private var pendingIndex: Int? = null
-    var connected = store.load()?.optBoolean("connected", false) == true
+    var connected =
+        store.load()?.let {
+            signedIn &&
+                it.optBoolean("connected", false) &&
+                it.optString("account").equals(verifiedAccount, true)
+        } == true
         private set
 
     var devices: List<AppleDevice> = emptyList()
@@ -99,10 +111,58 @@ internal class GoogleRepository private constructor(context: Context) {
         listeners.toList().forEach { it.onChanged() }
     }
 
+    /** A verified Google identity is not a Find Hub connection. Tokens are never persisted. */
+    fun acceptIdentity(identity: GoogleIdentity, completed: (Boolean) -> Unit) {
+        val requestGeneration = generation
+        worker.execute {
+            val previous = identityStore.load()
+            val changedIdentity =
+                previous == null ||
+                    previous.optString("subject") != identity.subject ||
+                    !previous.optString("account").equals(identity.email, true)
+            val saved = runCatching {
+                if (changedIdentity) store.clear()
+                identityStore.save(
+                    JSONObject()
+                        .put("subject", identity.subject)
+                        .put("account", identity.email)
+                        .put("verified", true)
+                )
+            }
+                .isSuccess
+            main.post {
+                if (generation != requestGeneration) {
+                    completed(false)
+                    return@post
+                }
+                if (saved) {
+                    verifiedAccount = identity.email
+                    if (changedIdentity) {
+                        generation++
+                        connected = false
+                        devices = emptyList()
+                        loading = false
+                        needsSignIn = false
+                        lastRefresh = 0L
+                    }
+                    signedIn = true
+                    changed()
+                }
+                completed(saved)
+            }
+        }
+    }
+
     fun accept(text: String) {
         if (text.length > GoogleProtocol.MAX_SNAPSHOT_CHARS || clearing) return
         val snapshot = runCatching { JSONObject(text) }.getOrNull() ?: return
         if (!snapshot.optBoolean("verified")) return
+        if (
+            !signedIn ||
+                verifiedAccount.isBlank() ||
+                !snapshot.optString("account").equals(verifiedAccount, true)
+        )
+            return
         val parsed = runCatching { GoogleProtocol.devices(snapshot) }.getOrNull() ?: return
         connected = true
         needsSignIn = false
@@ -179,12 +239,17 @@ internal class GoogleRepository private constructor(context: Context) {
     fun disconnect() {
         generation++
         connected = false
+        signedIn = false
+        verifiedAccount = ""
         devices = emptyList()
         needsSignIn = false
         clearing = true
         loading = true
         pendingIndex = null
-        worker.execute { store.clear() }
+        worker.execute {
+            store.clear()
+            identityStore.clear()
+        }
         bind()
         send(GoogleProtocol.CLEAR)
         changed()

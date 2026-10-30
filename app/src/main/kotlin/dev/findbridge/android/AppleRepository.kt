@@ -136,6 +136,7 @@ internal class AppleRepository private constructor(context: Context) {
                         session = snapshot
                         loading = false
                         nativeTransportVerified = true
+                        LoginVault(application).markSuccess()
                         applyResponse(response)
                     }
                 }
@@ -145,6 +146,7 @@ internal class AppleRepository private constructor(context: Context) {
                         if (generation == requestGeneration) {
                             loading = false
                             requiresSignIn = failure is AuthenticationExpiredException
+                            if (requiresSignIn) nativeTransportVerified = false
                             errorRes =
                                 if (failure is AuthenticationExpiredException) {
                                     R.string.sign_in_required
@@ -240,7 +242,7 @@ internal class AppleRepository private constructor(context: Context) {
         }
     }
 
-    fun logout() {
+    fun logout(afterCookiesCleared: (() -> Unit)? = null) {
         generation++
         session = null
         devices = emptyList()
@@ -252,7 +254,10 @@ internal class AppleRepository private constructor(context: Context) {
         // Queue after any pending save so an in-flight response cannot resurrect a logged-out
         // session.
         executor.execute { store.clear() }
-        CookieManager.getInstance().removeAllCookies { CookieManager.getInstance().flush() }
+        CookieManager.getInstance().removeAllCookies {
+            CookieManager.getInstance().flush()
+            afterCookiesCleared?.invoke()
+        }
         WebStorage.getInstance().deleteAllData()
         changed()
     }

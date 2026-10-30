@@ -136,6 +136,75 @@ class GoogleDataTest {
     }
 
     @Test
+    fun detachedRefreshDoesNotWaitForAnimationFrames() {
+        val completed = CountDownLatch(1)
+        var result: JSONObject? = null
+        ActivityScenario.launch(AuthActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val web =
+                    AuthActivity::class
+                        .java
+                        .getDeclaredField("webView")
+                        .apply {
+                            isAccessible = true
+                        }
+                        .get(activity) as WebView
+                web.stopLoading()
+                (web.parent as android.view.ViewGroup).removeView(web)
+                val exact = android.view.View.MeasureSpec.EXACTLY
+                web.measure(
+                    android.view.View.MeasureSpec.makeMeasureSpec(1080, exact),
+                    android.view.View.MeasureSpec.makeMeasureSpec(2400, exact),
+                )
+                web.layout(0, 0, 1080, 2400)
+                web.onResume()
+                WebViewCompat.addWebMessageListener(
+                    web,
+                    "FindBridgeGoogleData",
+                    GoogleProtocol.dataOrigins,
+                ) { _, message, _, _, _ ->
+                    val snapshot = JSONObject(message.data!!)
+                    if (snapshot.optBoolean("complete")) {
+                        result = snapshot
+                        completed.countDown()
+                    }
+                }
+                WebViewCompat.addDocumentStartJavaScript(
+                    web,
+                    "window.requestAnimationFrame=()=>0;",
+                    GoogleProtocol.dataOrigins,
+                )
+                val script =
+                    activity.assets
+                        .open("google-devices.js")
+                        .bufferedReader()
+                        .use { it.readText() }
+                        .replace("__FINDBRIDGE_GOOGLE_INITIAL_INDEX__", "-1")
+                WebViewCompat.addDocumentStartJavaScript(web, script, GoogleProtocol.dataOrigins)
+                web.loadDataWithBaseURL(
+                    GoogleProtocol.FIND_URL,
+                    """
+                    <!doctype html><body>
+                    <div role="button" data-index="0" onclick="this.hidden=true;document.body.insertAdjacentHTML('beforeend','<h1>Fixture Tablet</h1><div data-slot-id=0 data-location-lat=35.68 data-location-lng=139.76></div>')"><img alt="Fixture">Fixture Tablet</div>
+                    </body>
+                    """
+                        .trimIndent(),
+                    "text/html",
+                    "UTF-8",
+                    null,
+                )
+            }
+            assertTrue(
+                "A detached refresh must finish even when rAF never fires",
+                completed.await(5, TimeUnit.SECONDS),
+            )
+            val device = GoogleProtocol.devices(result!!).single()
+            assertEquals("Fixture Tablet", device.name)
+            assertEquals(35.68, device.latitude!!, 0.0)
+        }
+    }
+
+    @Test
     fun invalidCoordinatesCannotBecomeMapPinsAndSensitivePathsCannotOpen() {
         val snapshot =
             JSONObject(
@@ -148,10 +217,79 @@ class GoogleDataTest {
         assertNull(device.battery)
         assertEquals(0L, device.timestamp)
         assertTrue(GoogleProtocol.isDataPage(GoogleProtocol.FIND_URL))
+        assertTrue(GoogleProtocol.isDataPage("https://www.google.com/android/find/u/1/"))
+        assertFalse(GoogleProtocol.isPage("https://www.google.com/android/find/u/1/erase"))
+        assertFalse(GoogleProtocol.isPage("https://owner@www.google.com/android/find/"))
+        assertTrue(GoogleProtocol.isPage("https://accounts.youtube.com/accounts/SetSID?fixture=1"))
+        assertTrue(GoogleProtocol.isPage("https://www.google.com/accounts/CheckCookie?fixture=1"))
+        assertFalse(GoogleProtocol.isPage("https://accounts.youtube.com/watch"))
+        assertFalse(
+            GoogleProtocol.isPage("https://accounts.youtube.com.evil.invalid/accounts/SetSID")
+        )
         assertFalse(GoogleProtocol.isPage("https://www.google.com/android/find/lock"))
         assertFalse(GoogleProtocol.isPage("https://www.google.com.evil.invalid/android/find/"))
         assertFalse(GoogleProtocol.isPage("http://www.google.com/android/find/"))
         assertFalse(GoogleProtocol.isPage("https://www.google.com:444/android/find/"))
         assertFalse(GoogleProtocol.isPage("https://www.google.com/android/find/erase"))
+    }
+
+    @Test
+    fun delayedAccountMetadataCompletesTheCatalogOnMultiAccountPaths() {
+        val ready = CountDownLatch(1)
+        ActivityScenario.launch(AuthActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val web =
+                    AuthActivity::class
+                        .java
+                        .getDeclaredField("webView")
+                        .apply {
+                            isAccessible = true
+                        }
+                        .get(activity) as WebView
+                web.stopLoading()
+                WebViewCompat.addWebMessageListener(
+                    web,
+                    "FindBridgeGoogleData",
+                    GoogleProtocol.dataOrigins,
+                ) { _, message, _, _, _ ->
+                    val snapshot = JSONObject(message.data!!)
+                    if (
+                        snapshot.optString("account") == "owner@example.com" &&
+                            snapshot.optBoolean("complete")
+                    ) {
+                        assertEquals(1, GoogleProtocol.devices(snapshot).size)
+                        ready.countDown()
+                    } else if (snapshot.optBoolean("complete")) {
+                        web.evaluateJavascript(
+                            "document.body.insertAdjacentHTML('beforeend','<a aria-label=\"Google Account: owner@example.com\"></a>')",
+                            null,
+                        )
+                    }
+                }
+                val script =
+                    activity.assets
+                        .open("google-devices.js")
+                        .bufferedReader()
+                        .use { it.readText() }
+                        .replace("__FINDBRIDGE_GOOGLE_INITIAL_INDEX__", "-1")
+                WebViewCompat.addDocumentStartJavaScript(web, script, GoogleProtocol.dataOrigins)
+                web.loadDataWithBaseURL(
+                    "https://www.google.com/android/find/u/1/",
+                    """
+                    <!doctype html><body>
+                    <div role="button" data-index="0" onclick="this.hidden=true;document.body.insertAdjacentHTML('beforeend','<h1>Fixture Tablet</h1><div data-slot-id=0 data-location-lat=35.68 data-location-lng=139.76></div>')"><img alt="Fixture">Fixture Tablet</div>
+                    </body>
+                    """
+                        .trimIndent(),
+                    "text/html",
+                    "UTF-8",
+                    null,
+                )
+            }
+            assertTrue(
+                "Late account metadata must produce a new completed snapshot",
+                ready.await(5, TimeUnit.SECONDS),
+            )
+        }
     }
 }

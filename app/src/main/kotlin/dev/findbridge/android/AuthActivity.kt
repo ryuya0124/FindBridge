@@ -324,7 +324,7 @@ class AuthActivity : Activity() {
                         .acceptAuthenticatedResponse(data, webView.settings.userAgentString)
             ) {
                 captured = true
-                vault.markSuccess()
+                vault.markAuthenticated()
                 CookieManager.getInstance().flush()
                 setResult(RESULT_OK)
                 finish()

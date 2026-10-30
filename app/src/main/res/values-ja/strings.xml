@@ -126,4 +126,12 @@
     <string name="sound_connection_unavailable">この接続では利用できません</string>
     <string name="sound_request_sent">サウンドの再生を要求しました</string>
     <string name="sound_request_unknown">サウンド要求の結果を確認できませんでした</string>
+    <string name="google_choose_account">Googleアカウントを選択</string>
+    <string name="google_gms_help">端末のGoogleアカウントで接続します。追加確認が必要な場合はGoogleの公式画面で操作してください。</string>
+    <string name="google_gms_connecting">Googleに接続中…</string>
+    <string name="google_gms_unavailable">Google Play開発者サービスが必要です。更新または有効化して、もう一度お試しください。</string>
+    <string name="google_gms_configuration">Googleへの接続には、このアプリのパッケージ名と署名の登録が必要です。</string>
+    <string name="google_gms_scope_unavailable">GoogleからFind Hubへのアクセスが許可されていません。現在、Androidの位置情報は取得できません。</string>
+    <string name="google_gms_failed">Googleに接続できませんでした。通信環境を確認して、もう一度お試しください。</string>
+    <string name="google_signed_in">Googleにログイン済みです。Androidのデバイスを表示するにはFind Hubへの接続を完了してください。</string>
 </resources>

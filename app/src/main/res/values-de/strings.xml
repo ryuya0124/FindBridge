@@ -129,4 +129,12 @@
     <string name="sound_connection_unavailable">Mit dieser Verbindung nicht verfügbar</string>
     <string name="sound_request_sent">Tonanfrage gesendet</string>
     <string name="sound_request_unknown">Das Ergebnis der Tonanfrage konnte nicht bestätigt werden</string>
+    <string name="google_choose_account">Google-Konto auswählen</string>
+    <string name="google_gms_help">Verbinde ein Google-Konto auf diesem Gerät. Schließe zusätzliche Bestätigungen auf der offiziellen Google-Seite ab.</string>
+    <string name="google_gms_connecting">Verbindung mit Google…</string>
+    <string name="google_gms_unavailable">Google Play-Dienste sind erforderlich. Aktualisiere oder aktiviere sie und versuche es erneut.</string>
+    <string name="google_gms_configuration">Paketname und Signatur dieser App müssen bei Google registriert sein.</string>
+    <string name="google_gms_scope_unavailable">Google hat dieser App keinen Zugriff auf Find Hub gewährt. Android-Standorte sind derzeit nicht verfügbar.</string>
+    <string name="google_gms_failed">Verbindung mit Google fehlgeschlagen. Prüfe die Internetverbindung und versuche es erneut.</string>
+    <string name="google_signed_in">Bei Google angemeldet. Schließe die Find-Hub-Verbindung ab, um Android-Geräte anzuzeigen.</string>
 </resources>

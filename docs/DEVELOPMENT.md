@@ -4,7 +4,7 @@
 
 ## 構成
 
-アプリ・テスト・ビルド定義はKotlin / Kotlin DSLです。画面はAndroidのネイティブViewとMapLibre Nativeで構成しています。Apple認証の `AuthActivity` とGoogle公式認証の `GoogleAuthActivity` がWebViewを使用します。Googleのデータ取得にも別プロセスの短時間のWebViewを使用しますが、通常の地図・一覧・詳細はすべてネイティブです。
+アプリ・テスト・ビルド定義はKotlin / Kotlin DSLです。画面はAndroidのネイティブViewとMapLibre Nativeで構成しています。Apple認証の `AuthActivity` はWebViewを使用します。`GoogleAuthActivity` はGMSのAccountPicker / AuthorizationClientを使用し、WebViewを作成しません。Googleの追加確認とFind Hubデータの読み取りは、独立したGoogleWebSessionActivity / GoogleSessionで行います。通常の地図・一覧・詳細はすべてネイティブです。
 
 `apple-session.js` は公式ページの読み取り用応答をKotlinへ渡す小さなアダプターです。AndroidXのorigin制限付きメッセージリスナーを使用し、パスワードや確認コードにはアクセスしません。
 
@@ -79,15 +79,21 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 
 自動接続はネイティブの状態表示で公式ページを覆い、追加確認のときだけ表示を切り替えます。WebViewのautofillは自動接続中に無効とし、親の入力フォームのautofillセッションも接続時に閉じます。DOMの変化、描画フレーム、フォーカスとIMEのイベントで入力と送信を進めます。HTML到着を待つ固定時間や周期ポーリングはありません。120秒のタイマーは停止時のエラー通知用で、通常処理の開始を遅らせるものではありません。フォーカス中断は送信済みと扱わず、復帰イベントで再開します。入力画面へ戻った場合は暗号化領域から保存情報を読み直します。
 
-## Google Find Hub（試験実装）
+## Google接続
 
-`GoogleAuthActivity` / `GoogleLocationService` / `GoogleSession` は非公開の `:google` プロセスで動きます。最初のWebView作成前に `WebView.setDataDirectorySuffix("googleFindHub")` を指定し、AppleのCookie削除と分離します。アカウント識別子と接続フラグだけを別のKeystore名前空間で暗号化し、GoogleのCookieはこのWebViewのアプリ専用領域に保持します。CookieデータベースをKeystore暗号化したとは扱いません。
+`GoogleAuthActivity` は `play-services-auth:22.0.0` のAccountPicker / AuthorizationClientで、公開の `openid` と `userinfo.email` だけを要求します。トークンをメモリ内のHTTPS UserInfo要求に使い、確認済みメールとsubjectを検証します。本人識別情報は専用Keystore領域へ暗号化し、トークン・Googleパスワードは保存しません。GMSだけの認証成功を、Find Hub接続成功とは扱いません。
+
+`android_device_manager` はGoogleのinvalid_scopeで拒否されたため、製品のOAuth要求から削除しました。`GoogleWebSessionActivity` は既存のプライベートWebセッションを優先します。未接続ならGMSの旧 `weblogin:` ハンドオフを試み、正規のMergeSession URLを同じプロセスのWebViewへメモリ内で渡します。実機ではURLの発行後にもGoogleがWeb側の本人操作を要求しました。URLの発行だけではWeb接続成功に数えません。2段階認証・PIN・パスワード・同意は本人が操作します。Google公式アプリのpackage/signatureへのなりすましや、他アプリのCookie・マスタートークン・鍵の取得はありません。
+
+GMSのPendingIntentは復帰とフォーカスのイベントで開き、固定HTML待機・周期ポーリングはありません。読み取り済みの実カタログと、選択したGMSアカウントと一致する公式ページ上のアカウント情報が返った時点で、認証画面を閉じます。正規化データを受け取るメインプロセス側でもアカウントを照合します。正規のGoogle SSOのSetSID / CheckCookie遷移は、Googleの指定ホストとパスだけ通します。詳しい検証範囲は[Google調査](GOOGLE.md)を参照してください。
+
+`GoogleLocationService` / `GoogleSession` は非公開の `:google` プロセスで動きます。最初のWebView作成前に `WebView.setDataDirectorySuffix("googleFindHub")` を指定し、AppleのCookie削除と分離します。アカウント識別子と接続フラグだけを別のKeystore名前空間で暗号化し、GoogleのCookieはこのWebViewのアプリ専用領域に保持します。CookieデータベースをKeystore暗号化したとは扱いません。
 
 `google-devices.js` はGoogleの公式ページがDOMに公開する端末名と `data-slot-id` / `data-location-lat` / `data-location-lng` を読みます。地図カメラの中心から端末位置を推測せず、マーカーのslotをカタログのindexに照合します。端末を選ぶ／一覧へ戻る操作だけを使い、サウンド・紛失・消去の操作は呼びません。通常のFind Hub操作画面はネイティブの読み込みパネルで覆います。本人確認や同意のダイアログが現れた場合は自動操作を止め、Google公式の確認を所有者に表示します。確認ダイアログ以外へのクリック・ポインター・キー入力はキャプチャ段階で遮断し、同意を自動承認しません。Googleの秘密鍵、Cookie、入力パスワードをKotlin側に取り出す処理はありません。UA偽装やGoogleの安全性チェックの回避もしません。
 
 `GoogleProtocol` は正規化した端末情報を検証し、`GoogleRepository` へMessengerで渡します。最大500件・240,000文字、座標は有限かつ緯度経度の対が有効な場合だけ受け付けます。相対的な最終検知ラベルを現在時刻に書き換えません。GoogleとAppleの同名端末は別IDです。
 
-Googleはフォアグラウンドで2分以上経過したときと明示的な更新時に読み込みます。DOMアダプターはMutationObserverと描画フレームで進み、端末ごとの固定待機はありません。9秒／90秒の失敗期限で無応答時だけ打ち切ります。認証画面は実カタログ取得時点で閉じ、位置の取得はネイティブ画面から続けます。取得完了時はWebViewを破棄し、画面を離れるとbound serviceも解放します。非公開APIのOAuthトークンやAndroidのマスタートークンは使用しません。
+Googleはフォアグラウンドで2分以上経過したときと明示的な更新時に読み込みます。DOMアダプターはMutationObserverとmicrotaskで進み、画面のないbound serviceでも描画フレーム待ちで止まりません。端末ごとの固定待機はありません。9秒／90秒の失敗期限で無応答時だけ打ち切ります。認証画面は実カタログ取得時点で閉じ、位置の取得はネイティブ画面から続けます。取得完了時はWebViewを破棄し、画面を離れるとbound serviceも解放します。非公開APIのOAuthトークンやAndroidのマスタートークンは使用しません。
 
 ## サウンドとUWB
 
@@ -95,7 +101,7 @@ Googleはフォアグラウンドで2分以上経過したときと明示的な�
 
 UWBは未実装です。Android単体で標準の「探す」の対象と直接接続するための未解決点と一次資料を[UWB調査](UWB.md)に記載しています。iPhone側の連携アプリを前提とする実装は含めません。
 
-現時点で実アカウントのブラウザ上の端末一覧・位置と、アプリ内の公式サインイン開始を確認しています。HTML fixtureでDOM変換・slot照合・音操作なしを検証しています。アプリ内の実アカウント接続から取得まで、背景での再取得、オフライン位置のPIN認証は未確認です。fixtureの成功を実アカウントの成功に数えないでください。
+ブラウザ上では実アカウントの端末一覧・位置を確認しています。アプリではGMSの公開スコープによる本人認証を実機で確認しました。HTML fixtureでDOM変換・slot照合・音操作なしを検証しています。アプリ内の実アカウント接続から取得まで、背景での再取得、オフライン位置のPIN認証は未確認です。fixtureの成功を実アカウントの成功に数えないでください。
 
 ## 描画
 
@@ -104,6 +110,8 @@ UWBは未実装です。Android単体で標準の「探す」の対象と直接�
 移動中の更新はChoreographerのVsync通知で進み、120Hzなら通知間隔は約8.3msです。`MapFrameRate` が同じ解像度で使える高リフレッシュレートを要求し、MapLibreの60fps上限もその値に合わせます。OSの省電力・温度制御による制限は尊重します。固定140msの移動中制限はありません。取り込みとぼかしは1枚だけを処理し、完了前の要求をキューに溜めません。
 
 `GlassScene` は保存画像の地理的な4点と現在の地図投影から変換を作り、新しい画像を待つ間も背景の位置・倍率・回転・傾きを毎フレーム合わせます。AGSLと従来Canvasの両方へ適用します。移動中は最大320px幅と対応するぼかし半径で処理量を減らし、停止後に640pxへ仕上げます。静止中はフレームコールバックと高リフレッシュ要求を解除します。Vsyncの目標と、実際に完成できた新規画像数・GPU使用率は区別してください。
+
+地図スタイルの変更ではカメラの中心・倍率・回転・傾きを再設定せず、端末への再フィットを行いません。近接した複数端末へのフィットは、保存済みの一覧用ズーム（初期値14）を上限にします。手動の地図ジェスチャーが終了した時点で倍率だけ保存し、次回の一覧へ使用します。位置座標はこの設定へ保存しません。
 
 ## 画面・言語
 

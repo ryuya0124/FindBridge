@@ -67,6 +67,16 @@ class LocalizationAndVaultTest {
             assertTrue(vault.automaticAllowed())
             vault.markAttempt()
             assertFalse(vault.automaticAllowed())
+            vault.markAuthenticated()
+            assertFalse(
+                "Web authentication alone must not enable an immediate retry loop",
+                vault.automaticAllowed(),
+            )
+            vault.markSuccess()
+            assertTrue(
+                "A verified native session must clear the preceding retry window",
+                vault.automaticAllowed(),
+            )
             val prefs = context.getSharedPreferences(namespace, Context.MODE_PRIVATE)
             prefs.edit().putString("data", "AA==").commit()
             assertNull(vault.load())
