@@ -60,7 +60,18 @@ internal class NativeTabBar(
                         },
                     )
                 )
-            else selectedGlass
+            else
+                LayerDrawable(
+                    arrayOf(
+                        selectedGlass,
+                        GradientDrawable().apply {
+                            shape = GradientDrawable.RECTANGLE
+                            cornerRadius = activity.dp(30).toFloat()
+                            setColor(0xf2eff8f1.toInt())
+                            setStroke(activity.dp(1), 0x332d7d44)
+                        },
+                    )
+                )
         addView(
             selection,
             LayoutParams(1, activity.dp(60)).apply {
@@ -143,7 +154,7 @@ internal class NativeTabBar(
         }
         for (i in 0 until buttons.childCount) {
             val button = buttons.getChildAt(i) as LinearLayout
-            val color = if (i == index) Ui.green else Ui.muted
+            val color = if (i == index) Ui.positiveText else Ui.muted
             button.isSelected = i == index
             (button.getChildAt(0) as TabGlyph).tint = color
             (button.getChildAt(1) as TextView).apply {

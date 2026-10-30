@@ -25,6 +25,16 @@ internal class GoogleSession private constructor(context: Context) {
     private var attached = false
     private var requestedIndex = -1
     private var refreshAfterDetach: Int? = null
+    private var command: JSONObject? = null
+    private var commandGranted = false
+    private var commandReady = false
+    private var commandCommitReady = false
+    private var commandCommitGranted = false
+    private var commandGrantPending = false
+    private var commandPage = 0
+    private val commandWorker = java.util.concurrent.Executors.newSingleThreadExecutor()
+    var onCommandResult: ((String) -> Unit)? = null
+    var commandForeground: (() -> Boolean)? = null
     var snapshot: String? = null
         private set
 
@@ -129,6 +139,46 @@ internal class GoogleSession private constructor(context: Context) {
                     app.assets.open("google-debug-state.js").bufferedReader().use { it.readText() },
                     GoogleProtocol.dataOrigins,
                 )
+            }
+            WebViewCompat.addWebMessageListener(
+                view,
+                "FindBridgeGoogleActionState",
+                GoogleProtocol.dataOrigins,
+            ) { _, message, origin, mainFrame, _ ->
+                val operation = command ?: return@addWebMessageListener
+                if (
+                    !mainFrame ||
+                        origin.toString().trimEnd('/') !in GoogleProtocol.dataOrigins ||
+                        !GoogleProtocol.isDataPage(view.url.orEmpty()) ||
+                        (message.data?.length ?: 0) > 4096
+                )
+                    return@addWebMessageListener
+                val state =
+                    runCatching { JSONObject(message.data!!) }.getOrNull()
+                        ?: return@addWebMessageListener
+                if (state.optString("ticket") != operation.optString("ticket"))
+                    return@addWebMessageListener
+                val status = state.optString("status")
+                if (status == "ready") {
+                    commandReady = true
+                    resumeCommand()
+                } else if (status == "commitReady" && operation.optString("type") == "MARK_LOST") {
+                    commandCommitReady = true
+                    resumeCommand()
+                } else if (
+                    status in
+                        setOf(
+                            "REQUESTED",
+                            "UNKNOWN",
+                            "CANCELED",
+                            "UNAVAILABLE",
+                            "ACCOUNT_MISMATCH",
+                            "TARGET_CHANGED",
+                        )
+                ) {
+                    handler.removeCallbacks(timeout)
+                    onCommandResult?.invoke(status)
+                }
             }
             WebViewCompat.addWebMessageListener(
                 view,
@@ -246,11 +296,24 @@ internal class GoogleSession private constructor(context: Context) {
                 setOf("https://accounts.google.com"),
             )
             val script =
-                app.assets
-                    .open("google-devices.js")
-                    .bufferedReader()
-                    .use { it.readText() }
-                    .replace("__FINDBRIDGE_GOOGLE_INITIAL_INDEX__", requestedIndex.toString())
+                if (command != null) {
+                    app.assets
+                        .open("google-device-action.js")
+                        .bufferedReader()
+                        .use { it.readText() }
+                        .replace(
+                            "__FINDBRIDGE_GOOGLE_COMMAND__",
+                            command
+                                .toString()
+                                .replace("\u2028", "\\u2028")
+                                .replace("\u2029", "\\u2029"),
+                        )
+                } else
+                    app.assets
+                        .open("google-devices.js")
+                        .bufferedReader()
+                        .use { it.readText() }
+                        .replace("__FINDBRIDGE_GOOGLE_INITIAL_INDEX__", requestedIndex.toString())
             WebViewCompat.addDocumentStartJavaScript(view, script, GoogleProtocol.dataOrigins)
             var loadFailed = false
             view.webViewClient =
@@ -299,6 +362,14 @@ internal class GoogleSession private constructor(context: Context) {
                         favicon: android.graphics.Bitmap?,
                     ) {
                         loadFailed = false
+                        commandPage++
+                        commandReady = false
+                        commandGrantPending = false
+                        if (command != null && commandGranted) {
+                            view.stopLoading()
+                            onCommandResult?.invoke("UNKNOWN")
+                            return
+                        }
                         debugPage(view, "started")
                         handler.removeCallbacks(timeout)
                         if (!GoogleProtocol.isPage(url)) {
@@ -348,9 +419,16 @@ internal class GoogleSession private constructor(context: Context) {
         }
     }
 
-    fun attach(context: Context): WebView {
+    fun attach(context: Context, index: Int = -1, operation: JSONObject? = null): WebView {
+        destroyWeb()
+        command = operation
+        commandGranted = false
+        commandReady = false
+        commandCommitReady = false
+        commandCommitGranted = false
+        commandGrantPending = false
         attached = true
-        requestedIndex = -1
+        requestedIndex = index.takeIf { it in 0..499 } ?: -1
         val view = create()
         wrapper?.baseContext = context
         (view.parent as? ViewGroup)?.removeView(view)
@@ -373,6 +451,10 @@ internal class GoogleSession private constructor(context: Context) {
         onBlockedNavigation = null
         // A completed native handoff does not leave a second, hidden map rendering.
         destroyWeb()
+        command = null
+        commandGranted = false
+        onCommandResult = null
+        commandForeground = null
         refreshAfterDetach?.let { index ->
             refreshAfterDetach = null
             refresh(index)
@@ -400,6 +482,56 @@ internal class GoogleSession private constructor(context: Context) {
         refreshAfterDetach = null
         handler.removeCallbacks(timeout)
         if (!attached) destroyWeb()
+    }
+
+    fun cancelCommand() {
+        onCommandResult?.invoke(if (commandGranted) "UNKNOWN" else "CANCELED")
+    }
+
+    fun resumeCommand() {
+        val operation = command ?: return
+        val view = web ?: return
+        val committing = commandGranted && commandCommitReady && !commandCommitGranted
+        if (
+            !commandReady ||
+                (commandGranted && !committing) ||
+                commandGrantPending ||
+                !attached ||
+                commandForeground?.invoke() != true
+        )
+            return
+        commandGrantPending = true
+        val page = commandPage
+        val ticket = operation.getString("ticket")
+        commandWorker.execute {
+            val authorized = runCatching {
+                app.contentResolver
+                    .call(
+                        android.net.Uri.parse(
+                            "content://${BuildConfig.APPLICATION_ID}.googleidentity"
+                        ),
+                        "authorizeCommand",
+                        ticket,
+                        null,
+                    )
+                    ?.getBoolean("authorized") == true
+            }
+                .getOrDefault(false)
+            handler.post {
+                if (web !== view || command !== operation || commandPage != page) return@post
+                commandGrantPending = false
+                if (!attached || commandForeground?.invoke() != true) return@post
+                if (!authorized) onCommandResult?.invoke("CANCELED")
+                else {
+                    if (committing) commandCommitGranted = true else commandGranted = true
+                    val method = if (committing) "commit" else "execute"
+                    view.evaluateJavascript(
+                        "window.FindBridgeGoogleAction?.$method(${JSONObject.quote(ticket)})",
+                        null,
+                    )
+                }
+            }
+        }
     }
 
     fun clear(done: () -> Unit) {

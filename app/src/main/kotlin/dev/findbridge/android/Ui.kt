@@ -28,13 +28,16 @@ internal object Ui {
         get() = if (dark) 0xfff5f5f7.toInt() else 0xff1c1c1e.toInt()
 
     val muted
-        get() = if (dark) 0xffa0a0a8.toInt() else 0xff75757e.toInt()
+        get() = if (dark) 0xffa0a0a8.toInt() else 0xff51515c.toInt()
 
     val green
         get() = if (dark) 0xff32d74b.toInt() else 0xff28b14e.toInt()
 
+    val positiveText
+        get() = if (dark) green else 0xff086b2b.toInt()
+
     val blue
-        get() = if (dark) 0xff0a84ff.toInt() else 0xff007aff.toInt()
+        get() = if (dark) 0xff0a84ff.toInt() else 0xff0050ae.toInt()
 
     val surface
         get() = if (dark) 0xff1c1c1e.toInt() else 0xfffbfbfd.toInt()

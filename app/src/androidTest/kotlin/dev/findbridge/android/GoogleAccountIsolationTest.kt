@@ -57,6 +57,29 @@ class GoogleAccountIsolationTest {
                 assertEquals("First fixture", repository.devices.single().name)
                 repository.accept(catalog("second@another.example", "Wrong fixture"))
                 assertEquals("First fixture", repository.devices.single().name)
+                val full = JSONObject(catalog("first@example.invalid", "First fixture"))
+                full
+                    .getJSONArray("devices")
+                    .getJSONObject(0)
+                    .put("latitude", 35)
+                    .put("longitude", 139)
+                full
+                    .getJSONArray("devices")
+                    .put(
+                        JSONObject()
+                            .put("index", 1)
+                            .put("name", "Other fixture")
+                            .put("latitude", 36)
+                            .put("longitude", 140)
+                    )
+                repository.accept(full.toString())
+                val partial = JSONObject(full.toString()).put("requestedIndex", 0)
+                partial.getJSONArray("devices").getJSONObject(0).put("latitude", 35.5)
+                partial.getJSONArray("devices").getJSONObject(1).remove("latitude")
+                partial.getJSONArray("devices").getJSONObject(1).remove("longitude")
+                repository.accept(partial.toString())
+                assertEquals(35.5, repository.devices[0].latitude!!, 0.0)
+                assertEquals(36.0, repository.devices[1].latitude!!, 0.0)
             }
             identity("fixture-b", "second@another.example")
             instrumentation.runOnMainSync {

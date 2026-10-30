@@ -52,7 +52,16 @@ internal class LostModeForm(
         addView(activity.label(device.displayName(activity), 17, Ui.ink, true))
         addView(activity.label(device.model, 13, Ui.muted))
         activity.space(this, 12)
-        editor.addView(activity.label(activity.getString(R.string.lost_explanation), 14, Ui.muted))
+        editor.addView(
+            activity.label(
+                activity.getString(
+                    if (device.provider == DeviceProvider.GOOGLE) R.string.google_lost_explanation
+                    else R.string.lost_explanation
+                ),
+                14,
+                Ui.muted,
+            )
+        )
         activity.space(editor, 12)
         editor.addView(phone)
         activity.space(editor, 10)
@@ -80,7 +89,9 @@ internal class LostModeForm(
                             if (device.lostModeNeedsPasscode) code.text.toString() else "",
                         )
                     val valid =
-                        runCatching { LostMode.body(device, candidate) }.isSuccess &&
+                        (if (device.provider == DeviceProvider.GOOGLE)
+                            GoogleCommandStore.validLostDraft(device, candidate)
+                        else runCatching { LostMode.body(device, candidate) }.isSuccess) &&
                             (!device.lostModeNeedsPasscode ||
                                 code.text.toString() == codeAgain.text.toString())
                     if (!valid) {

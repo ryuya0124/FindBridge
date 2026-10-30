@@ -171,4 +171,19 @@
     <string name="lost_failed">The Lost Mode request was rejected.</string>
     <string name="lost_unknown">The result is unknown. Refresh device information before sending again.</string>
     <string name="lost_back">Back</string>
+    <string name="stop_sound">Stop Sound</string>
+    <string name="stop_sound_confirmation">Stop sound on %1$s?</string>
+    <string name="notify_found">Notify When Found</string>
+    <string name="notify_found_help">Apple will notify you when this device is located.</string>
+    <string name="notify_saved">Notification preference saved.</string>
+    <string name="notify_unknown">The notification preference could not be confirmed. Refresh device information.</string>
+    <string name="google_verify_location">Verify encrypted location</string>
+    <string name="google_verify_help">Enter any required PIN or verification on the official Google screen.</string>
+    <string name="google_action_processing">Sending request…</string>
+    <string name="google_action_requested">Request accepted. Refresh to check the device state.</string>
+    <string name="google_action_unavailable">This operation could not be prepared. Reconnect to Google and try again.</string>
+    <string name="google_action_target_changed">The account or device changed. The operation was canceled.</string>
+    <string name="google_action_unknown">The result is unknown. Refresh device information before trying again.</string>
+    <string name="google_lost_explanation">This locks the device and displays your contact details. Depending on its settings, the device may sign out of Google, remove Wallet payment cards, or require additional identity verification.</string>
+    <string name="google_sound_confirmation">Ring %1$s at full volume for up to five minutes?</string>
 </resources>

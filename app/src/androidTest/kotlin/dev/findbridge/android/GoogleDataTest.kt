@@ -72,6 +72,8 @@ class GoogleDataTest {
                       <div data-battery="50-charging" style="width:10px;height:10px"></div>
                       <div><span data-wifi="4" style="display:inline-block;width:10px;height:10px"></span><span>Fixture Wi-Fi</span></div>
                       <button onclick="document.getElementById('settings').hidden=false">settings</button>
+                      <button jsname="gnWSqc" onclick="window.remoteActionCount++">sound_sensing</button>
+                      <button jsname="LVPyJb" onclick="window.remoteActionCount++">lock</button>
                     </div>
                     <div id="settings" role="dialog" hidden>
                       <div class="Z3br3c">
@@ -143,6 +145,7 @@ class GoogleDataTest {
             assertTrue(devices.all { it.metadata.firstRegistered == "Oct 1, 2026" })
             assertTrue(devices.all { it.metadata.manufacturer == "Fixture Manufacturer" })
             assertTrue(devices.all { it.metadata.network == "Fixture Wi-Fi" })
+            assertTrue(devices.all { it.canPlaySound && it.lostModeSupported })
             val checked = CountDownLatch(1)
             scenario.onActivity {
                 web.evaluateJavascript(
@@ -155,6 +158,49 @@ class GoogleDataTest {
                 }
             }
             assertTrue(checked.await(2, TimeUnit.SECONDS))
+        }
+    }
+
+    @Test
+    fun verifiedEmptyCatalogCompletesWithoutInventingDevices() {
+        val complete = CountDownLatch(1)
+        ActivityScenario.launch(AuthActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val web =
+                    AuthActivity::class
+                        .java
+                        .getDeclaredField("webView")
+                        .apply { isAccessible = true }
+                        .get(activity) as WebView
+                web.stopLoading()
+                WebViewCompat.addWebMessageListener(
+                    web,
+                    "FindBridgeGoogleData",
+                    GoogleProtocol.dataOrigins,
+                ) { _, message, _, _, _ ->
+                    val data = JSONObject(message.data!!)
+                    assertEquals("fixture@example.invalid", data.getString("account"))
+                    assertTrue(data.getBoolean("catalogEmpty"))
+                    assertTrue(data.getBoolean("complete"))
+                    assertTrue(GoogleProtocol.devices(data).isEmpty())
+                    complete.countDown()
+                }
+                val script =
+                    activity.assets
+                        .open("google-devices.js")
+                        .bufferedReader()
+                        .use { it.readText() }
+                        .replace("__FINDBRIDGE_GOOGLE_INITIAL_INDEX__", "-1")
+                WebViewCompat.addDocumentStartJavaScript(web, script, GoogleProtocol.dataOrigins)
+                web.loadDataWithBaseURL(
+                    GoogleProtocol.FIND_URL,
+                    "<!doctype html><body><a aria-label=\"Google Account: fixture@example.invalid\"></a><h1>No devices found</h1></body>",
+                    "text/html",
+                    "UTF-8",
+                    null,
+                )
+            }
+            assertTrue(complete.await(5, TimeUnit.SECONDS))
         }
     }
 

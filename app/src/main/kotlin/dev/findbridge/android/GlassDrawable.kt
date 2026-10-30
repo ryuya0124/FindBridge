@@ -142,12 +142,19 @@ private class GlassShader33 {
                 half4 c=scene.eval(samplePoint);
                 float3 rgb=float3(c.rgb);
                 float luminance=dot(rgb,float3(0.2126,0.7152,0.0722));
-                rgb=mix(float3(luminance),rgb,1.12);
-                float tint=mix(0.36+material*0.40,0.40+material*0.43,dark)*mix(1.20,0.70,strength);
+                rgb=mix(float3(luminance),rgb,mix(0.78,1.12,dark));
+                // Keep a readable white material over dark water and aerial imagery.
+                float lightTint=0.84+material*0.10-strength*0.06;
+                float darkTint=(0.40+material*0.43)*mix(1.20,0.70,strength);
+                // Bright aerial pixels need a denser dark material for secondary text.
+                // Dark imagery retains its existing translucency in the same render pass.
+                float peak=max(rgb.r,max(rgb.g,rgb.b));
+                darkTint=max(darkTint,clamp((peak-0.16)/max(peak-0.09,0.001),0.0,0.99));
+                float tint=mix(lightTint,darkTint,dark);
                 float3 glassColor=mix(float3(0.985,0.986,1.0),float3(0.075,0.078,0.09),dark);
                 rgb=mix(rgb,glassColor,tint);
                 float shine=exp(-pow((distance+1.3)/1.35,2.0));
-                rgb+=shine*(0.12+0.18*max(-n.y,0.0))*(0.5+strength*0.5);
+                rgb+=shine*(mix(0.045,0.12,dark)+0.18*max(-n.y,0.0))*(0.5+strength*0.5);
                 rgb+=edge*0.025*max(-n.y,0.0);
                 rgb+=contact*(0.045+edge*0.07);
                 return half4(clamp(rgb,0.0,1.0)*alpha,alpha);

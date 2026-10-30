@@ -174,4 +174,19 @@
     <string name="lost_failed">Se ha rechazado la solicitud.</string>
     <string name="lost_unknown">Resultado desconocido. Actualiza la información antes de volver a enviar.</string>
     <string name="lost_back">Atrás</string>
+    <string name="stop_sound">Detener sonido</string>
+    <string name="stop_sound_confirmation">¿Detener el sonido de %1$s?</string>
+    <string name="notify_found">Notificar al encontrar</string>
+    <string name="notify_found_help">Apple te avisará cuando se localice este dispositivo.</string>
+    <string name="notify_saved">Preferencia de notificación guardada.</string>
+    <string name="notify_unknown">No se pudo confirmar la preferencia. Actualiza la información del dispositivo.</string>
+    <string name="google_verify_location">Verificar ubicación cifrada</string>
+    <string name="google_verify_help">Introduce el PIN necesario o verifica tu identidad en la pantalla oficial de Google.</string>
+    <string name="google_action_processing">Enviando solicitud…</string>
+    <string name="google_action_requested">Solicitud aceptada. Actualiza la información para comprobar el estado.</string>
+    <string name="google_action_unavailable">No se pudo preparar esta acción. Vuelve a conectar Google.</string>
+    <string name="google_action_target_changed">La cuenta o el dispositivo ha cambiado. Se canceló la acción.</string>
+    <string name="google_action_unknown">Se desconoce el resultado. Actualiza la información antes de volver a intentarlo.</string>
+    <string name="google_lost_explanation">Se bloqueará el dispositivo y se mostrarán tus datos de contacto. Según su configuración, puede cerrar la sesión de Google, eliminar tarjetas de Wallet o pedir verificaciones adicionales de identidad.</string>
+    <string name="google_sound_confirmation">¿Hacer sonar %1$s al máximo volumen durante hasta cinco minutos?</string>
 </resources>

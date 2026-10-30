@@ -168,4 +168,19 @@
     <string name="lost_failed">분실 모드 요청이 거부되었습니다.</string>
     <string name="lost_unknown">결과를 확인할 수 없습니다. 다시 전송하기 전에 기기 정보를 새로고침하세요.</string>
     <string name="lost_back">뒤로</string>
+    <string name="stop_sound">사운드 중단</string>
+    <string name="stop_sound_confirmation">%1$s의 사운드를 중단할까요?</string>
+    <string name="notify_found">찾으면 알림</string>
+    <string name="notify_found_help">Apple이 이 기기의 위치를 찾으면 알려줍니다.</string>
+    <string name="notify_saved">알림 설정을 저장했습니다.</string>
+    <string name="notify_unknown">알림 설정을 확인할 수 없습니다. 기기 정보를 새로고침하세요.</string>
+    <string name="google_verify_location">암호화된 위치 확인</string>
+    <string name="google_verify_help">필요한 PIN 입력과 본인 확인은 Google 공식 화면에서 진행하세요.</string>
+    <string name="google_action_processing">요청 전송 중…</string>
+    <string name="google_action_requested">요청을 접수했습니다. 기기 정보를 새로고침해 상태를 확인하세요.</string>
+    <string name="google_action_unavailable">작업을 준비할 수 없습니다. Google에 다시 연결해 확인하세요.</string>
+    <string name="google_action_target_changed">계정 또는 대상 기기가 변경되어 작업을 취소했습니다.</string>
+    <string name="google_action_unknown">결과를 확인할 수 없습니다. 다시 보내기 전에 기기 정보를 새로고침하세요.</string>
+    <string name="google_lost_explanation">기기를 잠그고 연락처를 표시합니다. 기기 설정에 따라 Google 계정에서 로그아웃하거나 월렛 결제 카드를 삭제하거나 추가 본인 확인을 요구할 수 있습니다.</string>
+    <string name="google_sound_confirmation">%1$s에서 최대 5분 동안 최대 음량으로 울릴까요?</string>
 </resources>

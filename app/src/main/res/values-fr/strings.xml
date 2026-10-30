@@ -174,4 +174,19 @@
     <string name="lost_failed">La demande a été refusée.</string>
     <string name="lost_unknown">Résultat inconnu. Actualisez les informations avant de renvoyer.</string>
     <string name="lost_back">Retour</string>
+    <string name="stop_sound">Arrêter le son</string>
+    <string name="stop_sound_confirmation">Arrêter le son de %1$s ?</string>
+    <string name="notify_found">Prévenir quand trouvé</string>
+    <string name="notify_found_help">Apple vous avertira dès que cet appareil sera localisé.</string>
+    <string name="notify_saved">Préférence de notification enregistrée.</string>
+    <string name="notify_unknown">La préférence ne peut pas être confirmée. Actualisez les informations de l’appareil.</string>
+    <string name="google_verify_location">Vérifier la position chiffrée</string>
+    <string name="google_verify_help">Saisissez le code PIN requis ou confirmez votre identité sur l’écran officiel de Google.</string>
+    <string name="google_action_processing">Envoi de la demande…</string>
+    <string name="google_action_requested">Demande acceptée. Actualisez les informations pour vérifier l’état.</string>
+    <string name="google_action_unavailable">Cette action ne peut pas être préparée. Reconnectez Google.</string>
+    <string name="google_action_target_changed">Le compte ou l’appareil a changé. L’action a été annulée.</string>
+    <string name="google_action_unknown">Le résultat est inconnu. Actualisez les informations avant de réessayer.</string>
+    <string name="google_lost_explanation">L’appareil sera verrouillé et affichera vos coordonnées. Selon ses réglages, il pourra se déconnecter de Google, supprimer des cartes de paiement de Wallet ou demander une vérification supplémentaire.</string>
+    <string name="google_sound_confirmation">Faire sonner %1$s au volume maximal pendant cinq minutes au maximum ?</string>
 </resources>

@@ -65,6 +65,24 @@ internal object UrlPolicy {
         return "https://${uri.rawAuthority}/fmipservice/client/web/$action$query"
     }
 
+    fun notificationEndpoint(refreshAddress: String): String {
+        require(isReadEndpoint(refreshAddress))
+        val uri = URI(refreshAddress)
+        return "https://${uri.rawAuthority}/fmipservice/client/web/saveLocFoundPref" +
+            uri.rawQuery?.let { "?$it" }.orEmpty()
+    }
+
+    fun isNotificationEndpoint(address: String): Boolean = runCatching {
+        val uri = URI(address)
+        uri.scheme == "https" &&
+            uri.userInfo == null &&
+            uri.port in listOf(-1, 443) &&
+            uri.fragment == null &&
+            uri.host.orEmpty().matches(Regex("p[0-9]+-fmipweb\\.icloud\\.com(?:\\.cn)?")) &&
+            uri.path == "/fmipservice/client/web/saveLocFoundPref"
+    }
+        .getOrDefault(false)
+
     fun isLostModeEndpoint(address: String): Boolean = runCatching {
         val uri = URI(address)
         uri.scheme == "https" &&

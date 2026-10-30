@@ -168,4 +168,19 @@
     <string name="lost_failed">丢失模式请求被拒绝。</string>
     <string name="lost_unknown">无法确认结果。再次发送前请刷新设备信息。</string>
     <string name="lost_back">返回</string>
+    <string name="stop_sound">停止播放声音</string>
+    <string name="stop_sound_confirmation">要停止 %1$s 的声音吗？</string>
+    <string name="notify_found">找到时通知</string>
+    <string name="notify_found_help">Apple 检测到此设备的位置时会通知你。</string>
+    <string name="notify_saved">已保存通知设置。</string>
+    <string name="notify_unknown">无法确认通知设置。请刷新设备信息。</string>
+    <string name="google_verify_location">验证加密位置</string>
+    <string name="google_verify_help">请在 Google 官方页面输入所需的 PIN 码或完成身份验证。</string>
+    <string name="google_action_processing">正在发送操作…</string>
+    <string name="google_action_requested">请求已接受。请刷新并确认设备状态。</string>
+    <string name="google_action_unavailable">无法准备此操作。请重新连接 Google 后再试。</string>
+    <string name="google_action_target_changed">账号或目标设备已更改，操作已取消。</string>
+    <string name="google_action_unknown">无法确认结果。请在重试前刷新设备信息。</string>
+    <string name="google_lost_explanation">锁定设备并显示你的联系信息。根据设备设置，设备可能会退出 Google 账号、移除 Google 钱包中的支付卡，或要求额外的身份验证。</string>
+    <string name="google_sound_confirmation">要在 %1$s 上以最大音量响铃最多五分钟吗？</string>
 </resources>

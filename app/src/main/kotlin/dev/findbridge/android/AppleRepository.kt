@@ -31,6 +31,12 @@ internal class AppleRepository private constructor(context: Context) {
     var sendingLostMode = false
         private set
 
+    var notificationTarget: String? = null
+        private set
+
+    var notificationValue = false
+        private set
+
     var devices: List<AppleDevice> = emptyList()
         private set
 
@@ -183,10 +189,9 @@ internal class AppleRepository private constructor(context: Context) {
         snapshot.put("url", UrlPolicy.soundEndpoint(snapshot.getString("url")))
         snapshot.put(
             "body",
-            JSONObject()
+            AppleRequestBody.base(current.optJSONObject("body"))
                 .put("device", id)
-                .put("subject", "Find Bridge")
-                .put("clientContext", JSONObject().put("fmly", true)),
+                .put("subject", "Find Bridge"),
         )
         val requestGeneration = generation
         sendingSound = true
@@ -255,6 +260,7 @@ internal class AppleRepository private constructor(context: Context) {
         READ,
         SOUND,
         LOST_MODE,
+        NOTIFICATION,
     }
 
     private fun request(snapshot: JSONObject, allowSound: Boolean = false): JSONObject =
@@ -267,6 +273,7 @@ internal class AppleRepository private constructor(context: Context) {
                 RequestKind.READ -> UrlPolicy.isReadEndpoint(address)
                 RequestKind.SOUND -> UrlPolicy.isSoundEndpoint(address)
                 RequestKind.LOST_MODE -> UrlPolicy.isLostModeEndpoint(address)
+                RequestKind.NOTIFICATION -> UrlPolicy.isNotificationEndpoint(address)
             }
         )
         val connection = URI(address).toURL().openConnection() as HttpURLConnection
@@ -328,6 +335,55 @@ internal class AppleRepository private constructor(context: Context) {
         }
         WebStorage.getInstance().deleteAllData()
         changed()
+    }
+
+    fun setNotifyWhenFound(
+        id: String,
+        enabled: Boolean,
+        completed: (AppleNotification.Result) -> Unit,
+    ) {
+        val current = session
+        val device = devices.firstOrNull { it.id == id }
+        val body = device?.let {
+            runCatching { AppleNotification.body(it, enabled, current?.optJSONObject("body")) }
+                .getOrNull()
+        }
+        if (current == null || body == null || notificationTarget != null) {
+            completed(AppleNotification.Result.FAILED)
+            return
+        }
+        val snapshot =
+            JSONObject(current.toString())
+                .put("body", body)
+                .put("url", UrlPolicy.notificationEndpoint(current.getString("url")))
+        val requestGeneration = generation
+        notificationTarget = id
+        notificationValue = enabled
+        changed()
+        executor.execute {
+            val result = runCatching {
+                check(generation == requestGeneration)
+                AppleNotification.result(send(snapshot, RequestKind.NOTIFICATION), id, enabled)
+            }
+                .getOrElse {
+                    if (it is AuthenticationExpiredException) AppleNotification.Result.AUTH_REQUIRED
+                    else AppleNotification.Result.UNKNOWN
+                }
+            main.post {
+                notificationTarget = null
+                if (generation != requestGeneration) return@post
+                if (result == AppleNotification.Result.SAVED)
+                    devices = devices.map {
+                        if (it.id == id) it.copy(notifyWhenFound = enabled) else it
+                    }
+                if (result == AppleNotification.Result.AUTH_REQUIRED) {
+                    requiresSignIn = true
+                    nativeTransportVerified = false
+                }
+                changed()
+                completed(result)
+            }
+        }
     }
 
     private class AuthenticationExpiredException : Exception()

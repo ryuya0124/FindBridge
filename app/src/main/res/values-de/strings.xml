@@ -171,4 +171,19 @@
     <string name="lost_failed">Die Anfrage wurde abgelehnt.</string>
     <string name="lost_unknown">Ergebnis unbekannt. Vor erneutem Senden Geräteinformationen aktualisieren.</string>
     <string name="lost_back">Zurück</string>
+    <string name="stop_sound">Ton stoppen</string>
+    <string name="stop_sound_confirmation">Ton auf %1$s stoppen?</string>
+    <string name="notify_found">Bei Fund benachrichtigen</string>
+    <string name="notify_found_help">Apple benachrichtigt dich, sobald dieses Gerät geortet wird.</string>
+    <string name="notify_saved">Benachrichtigungseinstellung gespeichert.</string>
+    <string name="notify_unknown">Die Einstellung konnte nicht bestätigt werden. Aktualisiere die Geräteinformationen.</string>
+    <string name="google_verify_location">Verschlüsselten Standort bestätigen</string>
+    <string name="google_verify_help">Gib die erforderliche PIN auf der offiziellen Google-Seite ein und bestätige deine Identität.</string>
+    <string name="google_action_processing">Anfrage wird gesendet…</string>
+    <string name="google_action_requested">Anfrage angenommen. Aktualisiere die Geräteinformationen, um den Status zu prüfen.</string>
+    <string name="google_action_unavailable">Die Aktion konnte nicht vorbereitet werden. Verbinde Google erneut.</string>
+    <string name="google_action_target_changed">Konto oder Gerät wurde geändert. Die Aktion wurde abgebrochen.</string>
+    <string name="google_action_unknown">Das Ergebnis ist unbekannt. Aktualisiere die Geräteinformationen vor einem erneuten Versuch.</string>
+    <string name="google_lost_explanation">Das Gerät wird gesperrt und deine Kontaktdaten werden angezeigt. Je nach Einstellung kann es sich bei Google abmelden, Wallet-Zahlungskarten entfernen oder zusätzliche Identitätsprüfungen verlangen.</string>
+    <string name="google_sound_confirmation">%1$s bis zu fünf Minuten mit voller Lautstärke klingeln lassen?</string>
 </resources>

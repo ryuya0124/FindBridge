@@ -35,12 +35,19 @@ internal data class AppleDevice(
     val lostModeNeedsPasscode: Boolean = false,
     val lostModePasscodeLength: Int = 6,
     val lostModeMessageLimit: Int = 140,
+    val soundSupported: Boolean = false,
+    val soundPlaying: Boolean = false,
+    val notifyWhenFoundSupported: Boolean = false,
+    val notifyWhenFound: Boolean = false,
 ) {
     val located: Boolean
         get() = latitude != null && longitude != null
 
     val canPlaySound: Boolean
-        get() = provider == DeviceProvider.APPLE && !kind.contains("pencil", true)
+        get() =
+            !kind.contains("pencil", true) &&
+                (provider == DeviceProvider.APPLE ||
+                    (provider == DeviceProvider.GOOGLE && soundSupported))
 
     enum class State {
         LOCATION_OFF,
@@ -170,6 +177,11 @@ internal data class AppleDevice(
                     json.optInt("passcodeLength", 6).takeIf { it in 4..12 } ?: 6,
                 lostModeMessageLimit =
                     json.optInt("maxMsgChar", 140).takeIf { it in 1..500 } ?: 140,
+                notifyWhenFoundSupported =
+                    json.optJSONObject("features")?.let {
+                        it.optBoolean("NWF") && it.optBoolean("LKL")
+                    } == true,
+                notifyWhenFound = json.optBoolean("locFoundEnabled"),
                 imageUrl =
                     DeviceImageUrls.appleDevice(
                         imageBaseUrl,

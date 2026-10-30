@@ -92,6 +92,13 @@ internal object GoogleProtocol {
                 provider = DeviceProvider.GOOGLE,
                 reportedStatus = r.optString("status").take(200),
                 imageUrl = DeviceImageUrls.google(r.optString("imageUrl")),
+                soundSupported = r.optBoolean("soundSupported"),
+                soundPlaying = r.optBoolean("soundPlaying"),
+                lostModeSupported = r.optBoolean("lostModeSupported"),
+                lostModeState =
+                    if (r.optBoolean("lostModeEnabled")) LostModeState.ENABLED
+                    else LostModeState.OFF,
+                lostModeMessageLimit = 80,
                 metadata = DeviceMetadata.fromGoogle(r.optJSONObject("details")),
             )
         }

@@ -36,6 +36,14 @@ class GoogleWebSessionActivity : Activity() {
     private var expectedAccount = ""
     private var browser: android.webkit.WebView? = null
     private var retryWeb: () -> Unit = {}
+    private var command: org.json.JSONObject? = null
+    private var commandTaken = false
+    private var commandFinished = false
+    private val commandTicket
+        get() = intent.getStringExtra(COMMAND_TICKET).orEmpty()
+
+    private val initialIndex
+        get() = intent.getIntExtra(DEVICE_INDEX, -1).takeIf { it in 0..499 } ?: -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Ui.configure(this)
@@ -43,6 +51,7 @@ class GoogleWebSessionActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         session = GoogleSession.get(this)
+        session.commandForeground = { resumed && hasWindowFocus() && !isFinishing && !isDestroyed }
         val root = column().apply { setBackgroundColor(Ui.surface) }
         root.setOnApplyWindowInsetsListener { view, insets ->
             if (android.os.Build.VERSION.SDK_INT >= 30) {
@@ -59,12 +68,23 @@ class GoogleWebSessionActivity : Activity() {
             }
         header.addView(
             label(getString(R.string.cancel), 15, Ui.blue).apply {
-                setOnClickListener { finish() }
+                setOnClickListener {
+                    if (commandTicket.isNotBlank()) session.cancelCommand()
+                    finish()
+                }
             },
             LinearLayout.LayoutParams(dp(88), dp(56)),
         )
         val title = column()
-        title.addView(label(getString(R.string.google_connect), 15, Ui.ink, true))
+        title.addView(
+            label(
+                if (commandTicket.isNotBlank()) "Google Find Hub"
+                else getString(R.string.google_connect),
+                15,
+                Ui.ink,
+                true,
+            )
+        )
         val origin = label("accounts.google.com", 10, Ui.muted)
         title.addView(origin)
         header.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
@@ -80,16 +100,28 @@ class GoogleWebSessionActivity : Activity() {
                 isFocusable = true
                 addView(ProgressBar(this@GoogleWebSessionActivity))
                 addView(
-                    label(getString(R.string.google_loading), 17, Ui.ink).apply {
-                        gravity = Gravity.CENTER
-                        setPadding(0, dp(20), 0, dp(12))
-                    }
+                    label(
+                            getString(
+                                if (commandTicket.isNotBlank()) R.string.google_action_processing
+                                else R.string.google_loading
+                            ),
+                            17,
+                            Ui.ink,
+                        )
+                        .apply {
+                            gravity = Gravity.CENTER
+                            setPadding(0, dp(20), 0, dp(12))
+                        }
                 )
                 addView(label(getString(R.string.google_auth_help), 13, Ui.muted))
             }
         frame.addView(loading, FrameLayout.LayoutParams(-1, -1))
         fun page(url: String) {
             origin.text = android.net.Uri.parse(url).host.orEmpty()
+            if (commandTicket.isNotBlank() && url.contains("/android/find/about")) {
+                session.onCommandResult?.invoke("UNAVAILABLE")
+                return
+            }
             // Find Hub's remote-control buttons are never exposed for interaction.
             if (
                 GoogleProtocol.isDataPage(url) ||
@@ -110,13 +142,25 @@ class GoogleWebSessionActivity : Activity() {
                 )
         }
         session.onPage = ::page
+        session.onCommandResult = { status ->
+            if (!commandFinished) {
+                commandFinished = true
+                setResult(RESULT_OK, Intent().putExtra(COMMAND_RESULT, status))
+                finish()
+            }
+        }
         session.onVerification = { required ->
-            if (required && !handoffAttempted) requestHandoff()
+            if (commandTicket.isNotBlank())
+                loading.visibility = if (required) View.GONE else View.VISIBLE
+            else if (required && GoogleProtocol.isDataPage(browser?.url.orEmpty()))
+                loading.visibility = View.GONE
+            else if (required && !handoffAttempted && commandTicket.isBlank()) requestHandoff()
             else if (handoffLoading) loading.visibility = View.VISIBLE
             else if (!required || handoffAttempted)
                 loading.visibility = if (required) View.GONE else View.VISIBLE
         }
-        dataCallback = { snapshot ->
+        dataCallback = data@{ snapshot ->
+            if (commandTicket.isNotBlank()) return@data
             // Authentication ends as soon as the real catalog is available. Position
             // enrichment belongs to the native screen's bound refresh, not this cover.
             val record = org.json.JSONObject(snapshot)
@@ -133,7 +177,10 @@ class GoogleWebSessionActivity : Activity() {
             } else if (
                 account.isNotBlank() &&
                     account.equals(expectedAccount, true) &&
-                    (record.optJSONArray("devices")?.length() ?: 0) > 0
+                    (if (initialIndex >= 0) record.optBoolean("complete")
+                    else
+                        (record.optJSONArray("devices")?.length() ?: 0) > 0 ||
+                            record.optBoolean("catalogEmpty"))
             ) {
                 setResult(RESULT_OK, Intent().putExtra(SNAPSHOT, snapshot))
                 finish()
@@ -141,14 +188,18 @@ class GoogleWebSessionActivity : Activity() {
         }
         session.onData = dataCallback
         errorCallback = {
-            loading.visibility = View.VISIBLE
-            loading.removeAllViews()
-            loading.addView(label(getString(R.string.google_sign_in_needed), 17, Ui.ink))
-            loading.addView(
-                actionButton(getString(R.string.connect_again)).apply {
-                    setOnClickListener { retryWeb() }
-                }
-            )
+            if (commandTicket.isNotBlank()) {
+                session.onCommandResult?.invoke("UNKNOWN")
+            } else {
+                loading.visibility = View.VISIBLE
+                loading.removeAllViews()
+                loading.addView(label(getString(R.string.google_sign_in_needed), 17, Ui.ink))
+                loading.addView(
+                    actionButton(getString(R.string.connect_again)).apply {
+                        setOnClickListener { retryWeb() }
+                    }
+                )
+            }
         }
         session.onError = errorCallback
         fun showLoading() {
@@ -156,10 +207,18 @@ class GoogleWebSessionActivity : Activity() {
             loading.removeAllViews()
             loading.addView(ProgressBar(this))
             loading.addView(
-                label(getString(R.string.google_loading), 17, Ui.ink).apply {
-                    gravity = Gravity.CENTER
-                    setPadding(0, dp(20), 0, dp(12))
-                }
+                label(
+                        getString(
+                            if (commandTicket.isNotBlank()) R.string.google_action_processing
+                            else R.string.google_loading
+                        ),
+                        17,
+                        Ui.ink,
+                    )
+                    .apply {
+                        gravity = Gravity.CENTER
+                        setPadding(0, dp(20), 0, dp(12))
+                    }
             )
             loading.addView(label(getString(R.string.google_auth_help), 13, Ui.muted))
         }
@@ -179,15 +238,38 @@ class GoogleWebSessionActivity : Activity() {
                         null,
                     )
                 val name = identity?.getString("account").orEmpty()
+                if (commandTicket.isNotBlank() && !commandTaken) {
+                    commandTaken = true
+                    command =
+                        runCatching {
+                            val result =
+                                contentResolver.call(
+                                    android.net.Uri.parse(
+                                        "content://${BuildConfig.APPLICATION_ID}.googleidentity"
+                                    ),
+                                    "takeCommand",
+                                    commandTicket,
+                                    null,
+                                )
+                            org.json.JSONObject(requireNotNull(result?.getString("command")))
+                        }
+                            .getOrNull()
+                }
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
                         expectedAccount = name
                         if (identity?.getBoolean("verified") != true || name.isBlank())
                             errorCallback?.invoke()
+                        else if (
+                            commandTicket.isNotBlank() &&
+                                (command == null ||
+                                    !command!!.optString("account").equals(name, true))
+                        )
+                            session.onCommandResult?.invoke("CANCELED")
                         else {
                             // A completed owner login can precede the catalog callback.
                             // Always try this private profile before requesting GMS renewal.
-                            val web = session.attach(this)
+                            val web = session.attach(this, initialIndex, command)
                             browser = web
                             frame.addView(web, 0, FrameLayout.LayoutParams(-1, -1))
                         }
@@ -201,6 +283,11 @@ class GoogleWebSessionActivity : Activity() {
         layoutPane = { PostureObserver.placeInPane(surface, root, fold) }
         surface.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> layoutPane() }
         setContentView(surface)
+        if (android.os.Build.VERSION.SDK_INT >= 33)
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                ::back,
+            )
     }
 
     override fun onStart() {
@@ -214,6 +301,7 @@ class GoogleWebSessionActivity : Activity() {
     }
 
     override fun onStop() {
+        if (commandTicket.isNotBlank() && !isFinishing) session.cancelCommand()
         posture?.stop()
         posture = null
         super.onStop()
@@ -223,6 +311,22 @@ class GoogleWebSessionActivity : Activity() {
         if (session.onData === dataCallback) session.onData = null
         if (session.onError === errorCallback) session.onError = null
         session.detach()
+        if (commandTicket.isNotBlank()) {
+            val ticket = commandTicket
+            worker.execute {
+                runCatching {
+                    contentResolver.call(
+                        android.net.Uri.parse(
+                            "content://${BuildConfig.APPLICATION_ID}.googleidentity"
+                        ),
+                        "finishCommand",
+                        ticket,
+                        null,
+                    )
+                }
+            }
+            command = null
+        }
         worker.shutdown()
         recovery = null
         super.onDestroy()
@@ -294,6 +398,7 @@ class GoogleWebSessionActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        session.resumeCommand()
         launchRecovery()
     }
 
@@ -304,6 +409,7 @@ class GoogleWebSessionActivity : Activity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) session.resumeCommand()
         if (hasFocus) launchRecovery()
     }
 
@@ -317,5 +423,16 @@ class GoogleWebSessionActivity : Activity() {
 
     companion object {
         const val SNAPSHOT = "googleDevices"
+        const val DEVICE_INDEX = "googleDeviceIndex"
+        const val COMMAND_TICKET = "googleCommandTicket"
+        const val COMMAND_RESULT = "googleCommandResult"
     }
+
+    private fun back() {
+        if (commandTicket.isNotBlank()) session.cancelCommand() else finish()
+    }
+
+    @android.annotation.SuppressLint("GestureBackNavigation")
+    @Deprecated("Activity back compatibility")
+    override fun onBackPressed() = back()
 }

@@ -200,7 +200,7 @@ GitHub Actionsはdebug/releaseのビルド、Lint、単体テストを実行し�
 
 `DeviceMetadata` はサービスが返した値だけを保持し、空値・JSON null・制御文字を除外します。Googleの設定パネルを読み取り専用で開き、機種名・IMEIまたはMEID・初回登録日を取得します。Wi-Fi / cellularの表示からネットワーク名・キャリア、batteryの表示から充電状態を取り込みます。メーカーやOSなども返る場合だけ表示します。モデル名からIMEIやメーカーを推測しません。詳細値はログに出しません。
 
-`LostModeForm` の入力→プレビュー→最終確認からだけ `AppleRepository.markLost` を呼びます。`/lostDevice` と `/lostDeviceWithFamilyAuth` は読み取り・サウンドとは別のURLポリシーで制限します。送信前に現在の対象・対応機能・状態を再確認し、二重送信と自動再試行をしません。HTTP成功は端末での有効化と同一視せず、読み取り応答から保留／有効を表示します。入力は保存・autofill対象外で、表示中はFLAG_SECUREを有効にし、閉じると値を消します。Googleの遠隔ロック・紛失モード解除・消去は未実装です。
+`LostModeForm` の入力→プレビュー→最終確認からだけ `AppleRepository.markLost` を呼びます。`/lostDevice` と `/lostDeviceWithFamilyAuth` は読み取り・サウンドとは別のURLポリシーで制限します。送信前に現在の対象・対応機能・状態を再確認し、二重送信と自動再試行をしません。HTTP成功は端末での有効化と同一視せず、読み取り応答から保留／有効を表示します。入力は保存・autofill対象外で、表示中はFLAG_SECUREを有効にし、閉じると値を消します。Googleの紛失設定は3.3.0-rc1から公式ページへの確認付き操作を試験実装しています。紛失モード解除・消去は未実装です。
 
 紛失モードのテストは架空端末と模擬応答だけを使用します。通常CIや実機の検証からリモートロックを送信しないでください。UWBは[Galaxyと暗号処理の検証](UWB-GALAXY.md)に記載した段階で、製品の測距機能には接続していません。
 
@@ -211,3 +211,13 @@ GitHub Actionsはdebug/releaseのビルド、Lint、単体テストを実行し�
 スイッチはMaterial Components 1.14.0の `SwitchMaterial` とM2の `Widget.MaterialComponents.CompoundButton.Switch` を使用します。`Ui.materialSwitch()` 内だけでライト／ダークのMaterialテーマをラップし、アプリの外観設定と緑色へ合わせます。ログイン情報保存・自動ログイン・動きを減らすの3か所へ適用し、主画面・タブ・シートのテーマやアニメーションは変更しません。
 
 Googleの読み取りだけを単独プロセスで確認する場合は、`-PverificationTargetProcess=dev.findbridge.android:google :verification:assembleDebug` でドライバーをビルドします。同じ署名の製品APKをインストールし、`-e googleread true -e class dev.findbridge.verification.GoogleReadLiveTest` を指定します。MainActivityの表示中の更新とテストクライアントを競合させません。
+
+
+## リリースノートの方針
+
+利用者向けの変更点・使い方・対応端末・利用上の制限だけを記載します。SDK・ライブラリ・R8・通信の内部構造・テスト件数・CI・開発作業の経緯はリリースノートへ含めず、このREADMEやVERIFICATION.mdへ記録します。未対応の機能を対応済みと表現せず、プレビューの制限は利用者が判断できる言葉で説明します。
+
+
+## 発見通知と操作の検証
+
+Appleの発見通知は `saveLocFoundPref` へ独立したPOSTを送り、対象IDと `locFoundEnabled` のBooleanが一致する場合だけ保存済みと扱います。NWF / LKLの対応フラグを要件にし、既存のセッション文脈だけをコピーします。サービスの通知なのでAndroidのバックグラウンド監視は追加しません。Googleの操作経路と現在の未対応機能は[対応状況](FEATURES.md)に記載しています。

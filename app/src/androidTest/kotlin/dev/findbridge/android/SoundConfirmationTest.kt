@@ -33,6 +33,7 @@ class SoundConfirmationTest {
                     }
                 assertEquals(0, requests.get())
                 confirmed.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+                confirmed.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             assertEquals(1, requests.get())

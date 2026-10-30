@@ -29,7 +29,7 @@ internal class GoogleRepository private constructor(context: Context) {
     private var endpoint: Messenger? = null
     private var bound = false
     private var foreground = false
-    private var generation = 0
+    @Volatile private var generation = 0
     private var clearing = false
     private var lastRefresh = 0L
     private var pendingIndex: Int? = null
@@ -138,6 +138,7 @@ internal class GoogleRepository private constructor(context: Context) {
                 if (saved) {
                     verifiedAccount = identity.email
                     if (changedIdentity) {
+                        GoogleCommandStore.clear()
                         generation++
                         connected = false
                         devices = emptyList()
@@ -166,7 +167,15 @@ internal class GoogleRepository private constructor(context: Context) {
         val parsed = runCatching { GoogleProtocol.devices(snapshot) }.getOrNull() ?: return
         connected = true
         needsSignIn = false
-        devices = parsed
+        val requestedIndex = snapshot.optInt("requestedIndex", -1)
+        val existing = devices.associateBy { it.id }
+        devices =
+            if (requestedIndex >= 0)
+                parsed.map {
+                    if (it.id.split(':').getOrNull(1)?.toIntOrNull() == requestedIndex) it
+                    else existing[it.id] ?: it
+                }
+            else parsed
         loading = !snapshot.optBoolean("complete", true)
         lastRefresh = android.os.SystemClock.elapsedRealtime()
         val metadata =
@@ -224,6 +233,11 @@ internal class GoogleRepository private constructor(context: Context) {
             refresh()
     }
 
+    fun invalidateRead() {
+        lastRefresh = 0L
+        if (foreground) refresh()
+    }
+
     fun refresh(id: String? = null) {
         if (!foreground || !connected || clearing || loading) return
         val index =
@@ -237,6 +251,7 @@ internal class GoogleRepository private constructor(context: Context) {
     }
 
     fun disconnect() {
+        GoogleCommandStore.clear()
         generation++
         connected = false
         signedIn = false
@@ -254,6 +269,30 @@ internal class GoogleRepository private constructor(context: Context) {
         send(GoogleProtocol.CLEAR)
         changed()
     }
+
+    fun commandTicket(
+        device: AppleDevice,
+        type: GoogleCommandType,
+        draft: LostModeDraft? = null,
+    ): String? {
+        if (!signedIn || !connected || clearing || devices.none { it.id == device.id }) return null
+        val current = devices.first { it.id == device.id }
+        return runCatching {
+            GoogleCommandStore.put(verifiedAccount, generation, current, type, draft)
+        }
+            .getOrNull()
+    }
+
+    fun takeCommand(ticket: String): JSONObject? =
+        if (signedIn && connected && !clearing)
+            GoogleCommandStore.take(ticket, verifiedAccount, generation)
+        else null
+
+    fun authorizeCommand(ticket: String): Boolean =
+        signedIn &&
+            connected &&
+            !clearing &&
+            GoogleCommandStore.authorized(ticket, verifiedAccount, generation)
 
     companion object {
         @android.annotation.SuppressLint("StaticFieldLeak") // Retains only applicationContext.

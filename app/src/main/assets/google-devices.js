@@ -56,9 +56,14 @@
         const e = document.querySelector('[aria-label*="@"][role="button"],button[aria-label*="@"],a[aria-label*="@"]');
         return e?.getAttribute('aria-label')?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
     };
+    const emptyCatalog = () => !records.size && !list().length && account() &&
+        ![...document.querySelectorAll('[aria-busy="true"],[role="progressbar"]')].some(visible) &&
+        [...document.querySelectorAll('h1,h2,h3,p,div,span')].some(e => visible(e) &&
+            /^(?:No devices found|You have no devices|No devices|デバイスが見つかりません(?:でした)?|デバイスがありません|登録されたデバイスはありません|Keine Geräte gefunden|Aucun appareil trouvé|No se encontraron dispositivos|기기를 찾을 수 없습니다|未找到设备|找不到裝置)[。.!！]?$/i.test(e.textContent.trim()));
     const emit = complete => {
-        if (!records.size) return;
-        const data = {verified: true, complete, account: account(), devices: [...records.values()]};
+        const empty = !!emptyCatalog();
+        if (!records.size && !empty) return;
+        const data = {verified: true, complete: empty || complete, requestedIndex, catalogEmpty: empty, account: account(), devices: [...records.values()]};
         const next = JSON.stringify(data);
         if (next === serial) return;
         serial = next;
@@ -105,6 +110,15 @@
         const detailVisible = detail && !buttons.length &&
             [...document.querySelectorAll('h1,h2,h3,div,span')].some(e => visible(e) && e.textContent.trim() === detail.name);
         if (detailVisible) {
+            const sound = [...document.querySelectorAll('[jsname="gnWSqc"]')].find(visible);
+            const lock = [...document.querySelectorAll('[jsname="LVPyJb"]')].find(visible);
+            const available = e => e && !e.disabled && e.getAttribute('aria-disabled') !== 'true' &&
+                !e.querySelector('button:disabled,[aria-disabled="true"]');
+            detail.soundPlaying = !!sound?.textContent.includes('stop_circle');
+            detail.soundSupported = !!available(sound) &&
+                (detail.soundPlaying || sound.textContent.includes('sound_sensing'));
+            detail.lostModeSupported = !!available(lock);
+            detail.lostModeEnabled = [...document.querySelectorAll('[jsname="SauT1d"]')].some(visible);
             const text = document.body.innerText;
             const details = detail.details ||= {};
             const wifi = [...document.querySelectorAll('[data-wifi]')].find(visible);
@@ -148,6 +162,9 @@
         }
         if (prompt) return;
         const {buttons, settled} = read();
+        if (emptyCatalog()) {
+            running = false; clearTimeout(deviceWatchdog); clearTimeout(cycleWatchdog); emit(true); return;
+        }
         if (!running) { emit(true); return; }
         if (waitingForCatalog) {
             if (!buttons.length) return;

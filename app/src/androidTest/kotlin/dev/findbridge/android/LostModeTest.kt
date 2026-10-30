@@ -149,6 +149,33 @@ class LostModeTest {
         }
     }
 
+    @Test
+    fun googleFormShowsAccountConsequencesAndStillRequiresFinalConfirmation() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                var calls = 0
+                val target =
+                    device().copy(provider = DeviceProvider.GOOGLE, lostModeMessageLimit = 80)
+                val root = activity.findViewById<FrameLayout>(android.R.id.content)
+                val form = LostModeForm(activity, target, canceled = {}, confirmed = { calls++ })
+                root.addView(form, FrameLayout.LayoutParams(-1, -1))
+                assertTrue(
+                    children(form).filterIsInstance<android.widget.TextView>().any {
+                        it.text.toString() == activity.getString(R.string.google_lost_explanation)
+                    }
+                )
+                val fields = children(form).filterIsInstance<EditText>()
+                assertEquals(2, fields.size)
+                fields[1].setText("Fixture recovery message")
+                form.findViewById<View>(LostModeForm.CONTINUE_ID).performClick()
+                assertEquals(0, calls)
+                form.findViewById<View>(LostModeForm.CONFIRM_ID).performClick()
+                assertEquals(1, calls)
+                root.removeView(form)
+            }
+        }
+    }
+
     private fun children(view: View): List<View> =
         listOf(view) +
             if (view is ViewGroup)

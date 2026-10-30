@@ -13,6 +13,13 @@ import android.widget.Button
     "AppCompatCustomView"
 ) // Platform-themed button; M2 is scoped to switches.
 internal class RefreshButton(context: Context) : Button(context) {
+    enum class Symbol {
+        REFRESH,
+        MORE,
+        ADD,
+    }
+
+    var symbol: Symbol? = null
     private val paint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             strokeCap = Paint.Cap.ROUND
@@ -91,9 +98,61 @@ internal class RefreshButton(context: Context) : Button(context) {
 
     override fun onDraw(canvas: Canvas) {
         if (!refreshing) {
-            super.onDraw(canvas)
+            if (symbol == null) super.onDraw(canvas)
+            else {
+                val unit = resources.displayMetrics.density
+                val x = width / 2f
+                val y = height / 2f
+                paint.color = currentTextColor
+                paint.alpha = if (isEnabled) 255 else 110
+                paint.style = Paint.Style.STROKE
+                when (symbol) {
+                    Symbol.REFRESH -> {
+                        canvas.drawArc(
+                            x - 8 * unit,
+                            y - 8 * unit,
+                            x + 8 * unit,
+                            y + 8 * unit,
+                            15f,
+                            300f,
+                            false,
+                            paint,
+                        )
+                        canvas.drawLine(
+                            x + 6 * unit,
+                            y - 6 * unit,
+                            x + 6 * unit,
+                            y - 11 * unit,
+                            paint,
+                        )
+                        canvas.drawLine(
+                            x + 6 * unit,
+                            y - 6 * unit,
+                            x + 1 * unit,
+                            y - 6 * unit,
+                            paint,
+                        )
+                    }
+                    Symbol.MORE -> {
+                        paint.style = Paint.Style.FILL
+                        for (offset in listOf(-6, 0, 6)) canvas.drawCircle(
+                            x + offset * unit,
+                            y,
+                            1.5f * unit,
+                            paint,
+                        )
+                    }
+                    Symbol.ADD -> {
+                        canvas.drawLine(x - 7 * unit, y, x + 7 * unit, y, paint)
+                        canvas.drawLine(x, y - 7 * unit, x, y + 7 * unit, paint)
+                    }
+                    null -> Unit
+                }
+                paint.style = Paint.Style.STROKE
+            }
             return
         }
+        paint.style = Paint.Style.STROKE
         val unit = resources.displayMetrics.density
         val centerX = width / 2f
         val centerY = height / 2f

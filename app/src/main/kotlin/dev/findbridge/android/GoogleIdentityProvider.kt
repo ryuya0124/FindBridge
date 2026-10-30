@@ -14,8 +14,28 @@ class GoogleIdentityProvider : ContentProvider() {
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
         check(Binder.getCallingUid() == Process.myUid())
-        require(method == "verifiedIdentity")
         val context = requireNotNull(context)
+        if (method == "authorizeCommand")
+            return Bundle().apply {
+                putBoolean(
+                    "authorized",
+                    GoogleRepository.get(context).authorizeCommand(arg.orEmpty()),
+                )
+            }
+        if (method == "finishCommand") {
+            GoogleCommandStore.revoke(arg.orEmpty())
+            return Bundle()
+        }
+        if (method == "takeCommand") {
+            val ticket =
+                requireNotNull(arg).takeIf { it.matches(Regex("[0-9a-f]{48}")) } ?: return Bundle()
+            return Bundle().apply {
+                GoogleRepository.get(context).takeCommand(ticket)?.let {
+                    putString("command", it.toString())
+                }
+            }
+        }
+        require(method == "verifiedIdentity")
         val identity = SecureSessionStore(context, "google_identity").load()
         val connection = SecureSessionStore(context, "google_connection").load()
         val verified = identity?.optBoolean("verified", false) == true

@@ -23,6 +23,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.RelativeLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
@@ -57,6 +58,8 @@ import org.maplibre.android.maps.Style
 
 /** Every primary screen is drawn with native Android views and MapLibre's native renderer. */
 class MainActivity : Activity(), AppleRepository.Listener {
+    private var googleCommandOpening = false
+
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
     }
@@ -269,6 +272,15 @@ class MainActivity : Activity(), AppleRepository.Listener {
             insets
         }
         setContentView(root)
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val lightBars =
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            window.insetsController?.setSystemBarsAppearance(
+                if (Ui.dark) 0 else lightBars,
+                lightBars,
+            )
+        }
         root.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
             if (r - l != or - ol || b - t != ob - ot) {
                 panel?.dismiss(immediate = true)
@@ -312,6 +324,28 @@ class MainActivity : Activity(), AppleRepository.Listener {
             elevation = dp(5).toFloat()
             contentDescription = description
             NativeMotion.press(this)
+        }
+
+    private fun headerButton(symbol: RefreshButton.Symbol, description: String) =
+        roundButton("", description).apply {
+            this.symbol = symbol
+            elevation = 0f
+            setTextColor(Ui.blue)
+            background = Ui.ripple(Color.TRANSPARENT, dp(18))
+        }
+
+    private fun headerActions(first: RefreshButton, second: RefreshButton): FrameLayout =
+        FrameLayout(this).apply {
+            addView(
+                View(this@MainActivity).apply {
+                    background = GlassDrawable(glass, this, dp(18).toFloat(), .18f)
+                },
+                FrameLayout.LayoutParams(-1, dp(36), Gravity.CENTER),
+            )
+            val buttons = LinearLayout(this@MainActivity)
+            buttons.addView(first, LinearLayout.LayoutParams(dp(44), dp(44)))
+            buttons.addView(second, LinearLayout.LayoutParams(dp(44), dp(44)))
+            addView(buttons, FrameLayout.LayoutParams(-1, -1))
         }
 
     private fun createMapControls() {
@@ -860,8 +894,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
             label(getString(R.string.devices), 28, Ui.ink, true),
             LinearLayout.LayoutParams(0, -2, 1f),
         )
-        header.addView(
-            roundButton("↻", getString(R.string.refresh_devices)).apply {
+        val refresh =
+            headerButton(RefreshButton.Symbol.REFRESH, getString(R.string.refresh_devices)).apply {
                 id = REFRESH_ID
                 elevation = 0f
                 setTextColor(Ui.blue)
@@ -871,17 +905,14 @@ class MainActivity : Activity(), AppleRepository.Listener {
                     repository.refresh()
                     google.refresh()
                 }
-            },
-            LinearLayout.LayoutParams(dp(44), dp(44)),
-        )
-        header.addView(
-            roundButton("···", getString(R.string.account_menu)).apply {
+            }
+        val more =
+            headerButton(RefreshButton.Symbol.MORE, getString(R.string.account_menu)).apply {
                 elevation = 0f
                 setTextColor(Ui.blue)
                 setOnClickListener(::accountMenu)
-            },
-            LinearLayout.LayoutParams(dp(44), dp(44)),
-        )
+            }
+        header.addView(headerActions(refresh, more), LinearLayout.LayoutParams(dp(88), dp(44)))
         body.addView(header)
         if (repository.error.isNotBlank())
             body.addView(
@@ -968,24 +999,21 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 setPadding(dp(22), dp(2), dp(16), dp(12))
             }
         header.addView(label(title, 28, Ui.ink, true), LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(
-            roundButton("↻", getString(R.string.refresh_source)).apply {
+        val refresh =
+            headerButton(RefreshButton.Symbol.REFRESH, getString(R.string.refresh_source)).apply {
                 elevation = 0f
                 setTextColor(Ui.blue)
                 isEnabled = !locationSync.loading
                 refreshing = locationSync.loading
                 setOnClickListener { locationSync.refresh() }
-            },
-            LinearLayout.LayoutParams(dp(44), dp(44)),
-        )
-        header.addView(
-            roundButton("+", getString(R.string.add_source)).apply {
+            }
+        val add =
+            headerButton(RefreshButton.Symbol.ADD, getString(R.string.add_source)).apply {
                 elevation = 0f
                 setTextColor(Ui.blue)
                 setOnClickListener { showSourceSettings() }
-            },
-            LinearLayout.LayoutParams(dp(44), dp(44)),
-        )
+            }
+        header.addView(headerActions(refresh, add), LinearLayout.LayoutParams(dp(88), dp(44)))
         body.addView(header)
         if (locationSync.error.isNotBlank())
             body.addView(
@@ -1107,31 +1135,47 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 background = Ui.ripple(Color.TRANSPARENT, 0)
             }
         row.addView(DeviceGlyph(this, device), LinearLayout.LayoutParams(dp(48), dp(52)))
-        val labels = column()
+        val labels = RelativeLayout(this)
+        val nameId = View.generateViewId()
+        val batteryId = View.generateViewId()
         labels.addView(
             label(device.displayName(this), 17, Ui.ink, true).apply {
+                id = nameId
                 isSingleLine = true
                 ellipsize = TextUtils.TruncateAt.END
-            }
+            },
+            RelativeLayout.LayoutParams(-1, -2).apply {
+                if (device.battery != null) addRule(RelativeLayout.START_OF, batteryId)
+            },
         )
+        if (device.battery != null)
+            labels.addView(
+                label(
+                        device.batteryText(),
+                        11,
+                        if (device.battery < .2) 0xffff453a.toInt() else Ui.muted,
+                    )
+                    .apply {
+                        id = batteryId
+                        setPadding(dp(10), 0, 0, 0)
+                    },
+                RelativeLayout.LayoutParams(-2, -2).apply {
+                    addRule(RelativeLayout.ALIGN_PARENT_END)
+                    addRule(RelativeLayout.ALIGN_BASELINE, nameId)
+                },
+            )
         labels.addView(
             label(device.subtitle(this), 12, Ui.muted).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
-            }
+            },
+            RelativeLayout.LayoutParams(-1, -2).apply { addRule(RelativeLayout.BELOW, nameId) },
         )
         row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(15) })
-        val tail = column().apply { gravity = Gravity.END }
-        if (device.battery != null)
-            tail.addView(
-                label(
-                    device.batteryText(),
-                    10,
-                    if (device.battery < .2) 0xffff453a.toInt() else Ui.muted,
-                )
-            )
-        tail.addView(label("›", 25, 0xffc7c7cc.toInt()))
-        row.addView(tail)
+        row.addView(
+            label("›", 22, Ui.muted).apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(dp(16), dp(48)).apply { leftMargin = dp(10) },
+        )
         row.contentDescription =
             "${device.displayName(this@MainActivity)}, ${device.statusText(this@MainActivity)}"
         NativeMotion.press(row, .98f)
@@ -1184,7 +1228,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 device.reportedStatus.ifBlank { device.statusText(this@MainActivity) } +
                     (if (device.battery != null) "   ▰ ${device.batteryText()}" else ""),
                 13,
-                if (device.located) Ui.green else Ui.muted,
+                if (device.located) Ui.positiveText else Ui.muted,
             )
         )
         space(content, 20)
@@ -1193,7 +1237,11 @@ class MainActivity : Activity(), AppleRepository.Listener {
             actions.addView(
                 actionTile(
                         "◖))",
-                        getString(R.string.play_sound),
+                        getString(
+                            if (device.provider == DeviceProvider.GOOGLE && device.soundPlaying)
+                                R.string.stop_sound
+                            else R.string.play_sound
+                        ),
                         getString(
                             if (device.canPlaySound) R.string.sound_action_help
                             else R.string.sound_connection_unavailable
@@ -1206,15 +1254,29 @@ class MainActivity : Activity(), AppleRepository.Listener {
                         alpha = if (isEnabled) 1f else .5f
                         contentDescription =
                             getString(
-                                if (device.canPlaySound) R.string.play_sound
+                                if (device.provider == DeviceProvider.GOOGLE && device.soundPlaying)
+                                    R.string.stop_sound
+                                else if (device.canPlaySound) R.string.play_sound
                                 else R.string.sound_disabled_accessibility
                             )
                         setOnClickListener {
                             SoundConfirmation.show(
                                 this@MainActivity,
                                 device.displayName(this@MainActivity),
+                                stop =
+                                    device.provider == DeviceProvider.GOOGLE && device.soundPlaying,
+                                google = device.provider == DeviceProvider.GOOGLE,
                             ) {
-                                if (this@MainActivity.foreground)
+                                if (
+                                    this@MainActivity.foreground &&
+                                        device.provider == DeviceProvider.GOOGLE
+                                )
+                                    googleCommand(
+                                        device,
+                                        if (device.soundPlaying) GoogleCommandType.STOP_SOUND
+                                        else GoogleCommandType.RING,
+                                    )
+                                else if (this@MainActivity.foreground)
                                     repository.playSound(device.id) { accepted ->
                                         Toast.makeText(
                                                 this@MainActivity,
@@ -1241,7 +1303,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
         )
         content.addView(actions)
         space(content, 20)
-        if (device.provider == DeviceProvider.APPLE && device.lostModeSupported) {
+        if (
+            device.provider in setOf(DeviceProvider.APPLE, DeviceProvider.GOOGLE) &&
+                (device.lostModeSupported || device.lostModeState != LostModeState.OFF)
+        ) {
             val stateText =
                 getString(
                     when (device.lostModeState) {
@@ -1268,6 +1333,14 @@ class MainActivity : Activity(), AppleRepository.Listener {
                                         )
                                             return@confirmed
                                         panel?.dismiss()
+                                        if (device.provider == DeviceProvider.GOOGLE) {
+                                            googleCommand(
+                                                device,
+                                                GoogleCommandType.MARK_LOST,
+                                                draft,
+                                            )
+                                            return@confirmed
+                                        }
                                         repository.markLost(device.id, draft) { result ->
                                             if (
                                                 this@MainActivity.foreground &&
@@ -1300,6 +1373,55 @@ class MainActivity : Activity(), AppleRepository.Listener {
             space(content, 16)
         }
         val information = device.metadata.rows().toMutableList()
+        if (device.provider == DeviceProvider.APPLE && device.notifyWhenFoundSupported) {
+            content.addView(
+                materialSwitch().apply {
+                    text = getString(R.string.notify_found)
+                    isChecked =
+                        if (repository.notificationTarget == device.id) repository.notificationValue
+                        else device.notifyWhenFound
+                    isEnabled = repository.notificationTarget == null
+                    setOnCheckedChangeListener { _, checked ->
+                        repository.setNotifyWhenFound(device.id, checked) { result ->
+                            Toast.makeText(
+                                    this@MainActivity,
+                                    when (result) {
+                                        AppleNotification.Result.SAVED -> R.string.notify_saved
+                                        AppleNotification.Result.AUTH_REQUIRED ->
+                                            R.string.sign_in_required
+                                        else -> R.string.notify_unknown
+                                    },
+                                    Toast.LENGTH_LONG,
+                                )
+                                .show()
+                        }
+                    }
+                },
+                LinearLayout.LayoutParams(-1, dp(52)),
+            )
+            content.addView(label(getString(R.string.notify_found_help), 12, Ui.muted))
+            space(content, 16)
+        }
+        if (device.provider == DeviceProvider.GOOGLE) {
+            content.addView(
+                actionButton(getString(R.string.google_verify_location), false).apply {
+                    id = GOOGLE_VERIFY_ID
+                    setOnClickListener {
+                        val index =
+                            device.id.split(':').getOrNull(1)?.toIntOrNull()
+                                ?: return@setOnClickListener
+                        startActivityForResult(
+                            Intent(this@MainActivity, GoogleWebSessionActivity::class.java)
+                                .putExtra(GoogleWebSessionActivity.DEVICE_INDEX, index),
+                            30,
+                        )
+                    }
+                },
+                LinearLayout.LayoutParams(-1, dp(48)),
+            )
+            content.addView(label(getString(R.string.google_verify_help), 12, Ui.muted))
+            space(content, 16)
+        }
         val batteryState =
             when (device.metadata.batteryState) {
                 "charging" -> getString(R.string.battery_charging)
@@ -1498,6 +1620,25 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 else GoogleAuthActivity::class.java,
             ),
             30,
+        )
+    }
+
+    private fun googleCommand(
+        device: AppleDevice,
+        type: GoogleCommandType,
+        draft: LostModeDraft? = null,
+    ) {
+        if (googleCommandOpening) return
+        val ticket = google.commandTicket(device, type, draft)
+        if (ticket == null) {
+            Toast.makeText(this, R.string.google_action_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+        googleCommandOpening = true
+        startActivityForResult(
+            Intent(this, GoogleWebSessionActivity::class.java)
+                .putExtra(GoogleWebSessionActivity.COMMAND_TICKET, ticket),
+            31,
         )
     }
 
@@ -1883,8 +2024,27 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 31) {
+            googleCommandOpening = false
+            val result = data?.getStringExtra(GoogleWebSessionActivity.COMMAND_RESULT)
+            if (result != null && result != "CANCELED")
+                Toast.makeText(
+                        this,
+                        when (result) {
+                            "REQUESTED" -> R.string.google_action_requested
+                            "UNAVAILABLE" -> R.string.google_action_unavailable
+                            "ACCOUNT_MISMATCH",
+                            "TARGET_CHANGED" -> R.string.google_action_target_changed
+                            else -> R.string.google_action_unknown
+                        },
+                        Toast.LENGTH_LONG,
+                    )
+                    .show()
+            google.invalidateRead()
+        }
         if (requestCode == 30 && resultCode == RESULT_OK) {
             data?.getStringExtra(GoogleAuthActivity.SNAPSHOT)?.let { google.accept(it) }
+            google.invalidateRead()
             fitted = false
         }
         if (requestCode == 10) {
@@ -2030,5 +2190,6 @@ class MainActivity : Activity(), AppleRepository.Listener {
         const val PANEL_ID = 1011
         const val SELECTED_PIN_ID = 1012
         const val GOOGLE_CONNECT_ID = 1013
+        const val GOOGLE_VERIFY_ID = 1014
     }
 }
