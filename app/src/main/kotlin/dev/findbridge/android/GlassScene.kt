@@ -4,10 +4,14 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.PixelCopy
+import android.view.SurfaceView
+import android.view.TextureView
 import android.view.View
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
 
 /** Supplies real map pixels to glass backgrounds. UI text is never part of the blurred scene. */
 internal class GlassScene(private val mapView: View) {
@@ -48,27 +52,84 @@ internal class GlassScene(private val mapView: View) {
         if (SystemClock.uptimeMillis() - lastSnapshot < if (immediate) 100 else 140) return
         pending = true
         lastSnapshot = SystemClock.uptimeMillis()
-        map.snapshot { snapshot ->
-            handler.post {
-                if (disposed) return@post
-                val targetWidth = minOf(snapshot.width, 640)
-                val targetHeight =
-                    (snapshot.height.toFloat() * targetWidth / snapshot.width)
-                        .toInt()
-                        .coerceAtLeast(1)
-                worker.execute {
-                    val scaled =
-                        Bitmap.createScaledBitmap(snapshot, targetWidth, targetHeight, true)
-                    val blurred = GlassBlur.create(scaled)
-                    handler.post publish@{
-                        pending = false
-                        if (disposed) return@publish
-                        bitmap = blurred
-                        observers.removeAll { it.get() == null }
-                        observers.forEach { it.get()?.invalidateSelf() }
+        copyBackdrop(map) { scaled ->
+            if (disposed) {
+                scaled.recycle()
+                return@copyBackdrop
+            }
+            worker.execute {
+                val blurred = GlassBlur.create(scaled)
+                scaled.recycle()
+                handler.post publish@{
+                    pending = false
+                    if (disposed) {
+                        blurred.recycle()
+                        return@publish
                     }
+                    bitmap = blurred
+                    observers.removeAll { it.get() == null }
+                    observers.forEach { it.get()?.invalidateSelf() }
                 }
             }
+        }
+    }
+
+    /**
+     * Downsample at the renderer surface, before pixels reach the CPU, rather than copying a full
+     * phone/tablet framebuffer and allocating another scaled image on every update.
+     */
+    private fun copyBackdrop(map: MapLibreMap, consume: (Bitmap) -> Unit) {
+        val targetWidth = minOf(width, 640)
+        val targetHeight = (height.toLong() * targetWidth / width).toInt().coerceAtLeast(1)
+        fun fallback() {
+            if (disposed) {
+                pending = false
+                return
+            }
+            map.snapshot { snapshot ->
+                handler.post {
+                    if (disposed) {
+                        pending = false
+                        return@post
+                    }
+                    val scaled =
+                        Bitmap.createScaledBitmap(snapshot, targetWidth, targetHeight, true)
+                    if (scaled !== snapshot) snapshot.recycle()
+                    consume(scaled)
+                }
+            }
+        }
+        val renderView = (mapView as? MapView)?.renderView
+        when (renderView) {
+            is SurfaceView -> {
+                val target = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+                val request = runCatching {
+                    PixelCopy.request(
+                        renderView,
+                        target,
+                        { result ->
+                            if (result == PixelCopy.SUCCESS) consume(target)
+                            else {
+                                target.recycle()
+                                fallback()
+                            }
+                        },
+                        handler,
+                    )
+                }
+                if (request.isFailure) {
+                    target.recycle()
+                    fallback()
+                }
+            }
+            is TextureView -> {
+                val target = runCatching {
+                    renderView.getBitmap(targetWidth, targetHeight)
+                }
+                    .getOrNull()
+                if (target != null) consume(target) else fallback()
+            }
+            else -> fallback()
         }
     }
 

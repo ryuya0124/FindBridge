@@ -4,7 +4,7 @@
 
 ## 構成
 
-アプリ・テスト・ビルド定義はKotlin / Kotlin DSLです。画面はAndroidのネイティブViewとMapLibre Nativeで構成しています。認証時の `AuthActivity` だけがWebViewを使用し、接続後に破棄します。
+アプリ・テスト・ビルド定義はKotlin / Kotlin DSLです。画面はAndroidのネイティブViewとMapLibre Nativeで構成しています。Apple認証の `AuthActivity` とGoogle公式認証の `GoogleAuthActivity` がWebViewを使用します。Googleのデータ取得にも別プロセスの短時間のWebViewを使用しますが、通常の地図・一覧・詳細はすべてネイティブです。
 
 `apple-session.js` は公式ページの読み取り用応答をKotlinへ渡す小さなアダプターです。AndroidXのorigin制限付きメッセージリスナーを使用し、パスワードや確認コードにはアクセスしません。
 
@@ -77,9 +77,21 @@ apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-relea
 
 `apple-autologin.js` は保存を許可された情報をメモリ内で挿入し、HTTPSの `idmsa.apple.com` / `account.apple.com` の認証パスだけへ投入します。`apple-login-landing.js` はiCloudの接続入口、`apple-login-relay.js` はApple認証iframeのボタン位置を検証します。Appleの認証フレームが重なっている場合も、実際の親子Windowと完全一致するoriginを各段で確認して中継します。ボタンは従来のIDに加えて、8言語のサインイン／続けるに対応します。ブリッジに資格情報を流さず、表示中WebView内のサインイン操作だけを行います。公式画面が変わった場合には手動入力へ戻れます。新しい確認コードは本人が入力します。
 
+## Google Find Hub（試験実装）
+
+`GoogleAuthActivity` / `GoogleLocationService` / `GoogleSession` は非公開の `:google` プロセスで動きます。最初のWebView作成前に `WebView.setDataDirectorySuffix("googleFindHub")` を指定し、AppleのCookie削除と分離します。アカウント識別子と接続フラグだけを別のKeystore名前空間で暗号化し、GoogleのCookieはこのWebViewのアプリ専用領域に保持します。CookieデータベースをKeystore暗号化したとは扱いません。
+
+`google-devices.js` はGoogleの公式ページがDOMに公開する端末名と `data-slot-id` / `data-location-lat` / `data-location-lng` を読みます。地図カメラの中心から端末位置を推測せず、マーカーのslotをカタログのindexに照合します。端末を選ぶ／一覧へ戻る操作だけを使い、サウンド・紛失・消去の操作は呼びません。通常のFind Hub操作画面はネイティブの読み込みパネルで覆います。本人確認や同意のダイアログが現れた場合は自動操作を止め、Google公式の確認を所有者に表示します。確認ダイアログ以外へのクリック・ポインター・キー入力はキャプチャ段階で遮断し、同意を自動承認しません。Googleの秘密鍵、Cookie、入力パスワードをKotlin側に取り出す処理はありません。UA偽装やGoogleの安全性チェックの回避もしません。
+
+`GoogleProtocol` は正規化した端末情報を検証し、`GoogleRepository` へMessengerで渡します。最大500件・240,000文字、座標は有限かつ緯度経度の対が有効な場合だけ受け付けます。相対的な最終検知ラベルを現在時刻に書き換えません。GoogleとAppleの同名端末は別IDです。
+
+Googleはフォアグラウンドで2分以上経過したときと明示的な更新時に読み込みます。取得完了時はWebViewを破棄し、画面を離れるとbound serviceも解放します。非公開APIのOAuthトークンやAndroidのマスタートークンは使用しません。
+
+現時点で実アカウントのブラウザ上の端末一覧・位置と、アプリ内の公式サインイン開始を確認しています。HTML fixtureでDOM変換・slot照合・音操作なしを検証しています。アプリ内の実アカウント接続から取得まで、背景での再取得、オフライン位置のPIN認証は未確認です。fixtureの成功を実アカウントの成功に数えないでください。
+
 ## 描画
 
-`MapStyles` が標準／航空写真／ハイブリッドと明暗を生成します。`GlassScene` は実際のMapLibre画像をメモリ内で縮小し、ワーカースレッドでぼかします。Android 13以降ではAGSLで屈折・彩度・縁のハイライトを追加しを描画します。それ以前はぼかし画像と色の重ね合わせへフォールバックします。UI文字列は背景画像に混ぜません。Apple固有のレンダラー・画像・SF Symbolsは使用していません。
+`MapStyles` が標準／航空写真／ハイブリッドと明暗を生成します。`GlassScene` はMapLibreのSurfaceViewをPixelCopyで最大幅640pxへ直接縮小して取り込み、ワーカースレッドでぼかします。TextureViewでは縮小済みgetBitmap、取得できない場合は従来のmap.snapshotへフォールバックします。全解像度のCPU画像を毎回割り当てる経路を通常は通りません。Android 13以降ではAGSLで屈折・彩度・縁のハイライトを追加して描画します。それ以前はぼかし画像と色の重ね合わせへフォールバックします。UI文字列は背景画像に混ぜません。Apple固有のレンダラー・画像・SF Symbolsは使用していません。
 
 ## 画面・言語
 
@@ -122,3 +134,5 @@ adb -s emulator-5556 shell am instrument -w \
 `NativeFeaturesTest` の位置データは明示的なテストfixtureです。実アカウントの人・持ち物の取得確認には数えません。位置・所有者名・認証情報をログやコミットへ含めないでください。
 
 GitHub Actionsはdebug/releaseのビルド、Lint、単体テストを実行します。CIには署名鍵とAppleの認証情報を置きません。署名済みAPKは非公開GitHub Releasesで配布します。エミュレータ・認証・地図の実表示はローカルの[検証記録](../VERIFICATION.md)を参照してください。
+
+`MapIdleRenderingTest` は標準／航空写真の静止時のスナップショット数と地図描画数、取り込み解像度と実画素を確認します。`GoogleDataTest` は合成の公開座標を使い、異なる端末のマーカー混同や遠隔操作を検出します。`SavedLoginFormLiveTest` の `-e keyboard true` はソフトキーボードを表示した接続経路です。

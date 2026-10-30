@@ -119,4 +119,12 @@
         <item quantity="other">Hace %d días</item>
         <item quantity="many">Hace %d días</item>
     </plurals>
+    <string name="google_connect">Conectar cuenta de Google</string>
+    <string name="google_disconnect">Desconectar cuenta de Google</string>
+    <string name="google_connected">Cuenta de Google conectada</string>
+    <string name="google_help">Ve tus dispositivos Android y Apple en el mismo mapa.</string>
+    <string name="google_loading">Cargando tus dispositivos Android…</string>
+    <string name="google_auth_help">Introduce tu contraseña o verificación en la pantalla oficial de Google si se solicita.</string>
+    <string name="google_sign_in_needed">Vuelve a iniciar sesión en Google para actualizar las ubicaciones de Android.</string>
+    <string name="google_source">Ubicación de Google Find Hub. Las ubicaciones sin conexión pueden requerir verificación de Google.</string>
 </resources>

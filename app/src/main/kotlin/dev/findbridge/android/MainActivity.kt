@@ -62,6 +62,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private lateinit var repository: AppleRepository
+    private lateinit var google: GoogleRepository
     private lateinit var loginVault: LoginVault
     private var foreground = false
     private var connecting = false
@@ -130,6 +131,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         object : Runnable {
             override fun run() {
                 repository.refresh()
+                google.refreshIfDue()
                 locationSync.refresh()
                 handler.postDelayed(this, 30_000)
             }
@@ -148,6 +150,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         }
         MapLibre.getInstance(this)
         repository = AppleRepository.get(this)
+        google = GoogleRepository.get(this)
         loginVault = LoginVault(this)
         locationSync = LocationSyncRepository.get(this)
         root =
@@ -250,6 +253,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             )
         }
         repository.addListener(this)
+        google.addListener(this)
         locationSync.addListener(this)
         renderSheet()
         if (savedInstanceState == null)
@@ -594,7 +598,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         when (activeTab) {
             0,
             2 -> sharedEntries().map { it.asDevice() }
-            1 -> repository.devices + locationSync.pencils.map { it.asDevice() }
+            1 -> repository.devices + google.devices + locationSync.pencils.map { it.asDevice() }
             else -> emptyList()
         }
 
@@ -824,9 +828,12 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 id = REFRESH_ID
                 elevation = 0f
                 setTextColor(Ui.blue)
-                isEnabled = !repository.loading
-                if (repository.loading) NativeMotion.spin(this)
-                setOnClickListener { repository.refresh() }
+                isEnabled = !repository.loading && !google.loading
+                if (repository.loading || google.loading) NativeMotion.spin(this)
+                setOnClickListener {
+                    repository.refresh()
+                    google.refresh()
+                }
             },
             LinearLayout.LayoutParams(dp(44), dp(44)),
         )
@@ -848,14 +855,22 @@ class MainActivity : Activity(), AppleRepository.Listener {
                     }
                 }
             )
-        if (!repository.hasSession && locationSync.pencils.isEmpty()) {
+        if (google.needsSignIn)
+            body.addView(
+                label(getString(R.string.google_sign_in_needed), 12, Ui.blue).apply {
+                    setPadding(dp(22), 0, dp(22), dp(8))
+                    setOnClickListener { connectGoogle() }
+                }
+            )
+        if (!repository.hasSession && !google.connected && locationSync.pencils.isEmpty()) {
             renderSignIn()
             return
         }
         if (visibleDevices().isEmpty()) {
             body.addView(
                 label(
-                        if (repository.loading) getString(R.string.loading_devices)
+                        if (repository.loading || google.loading)
+                            getString(R.string.loading_devices)
                         else getString(R.string.no_devices),
                         16,
                         Ui.muted,
@@ -1034,6 +1049,14 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 gravity = Gravity.CENTER
             }
         )
+        space(content, 12)
+        content.addView(
+            actionButton(getString(R.string.google_connect), false).apply {
+                id = GOOGLE_CONNECT_ID
+                setOnClickListener { connectGoogle() }
+            },
+            LinearLayout.LayoutParams(-1, dp(50)),
+        )
         scroll.addView(content)
         body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
     }
@@ -1121,7 +1144,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         space(content, 5)
         content.addView(
             label(
-                device.statusText(this@MainActivity) +
+                device.reportedStatus.ifBlank { device.statusText(this@MainActivity) } +
                     (if (device.battery != null) "   ▰ ${device.batteryText()}" else ""),
                 13,
                 if (device.located) Ui.green else Ui.muted,
@@ -1168,12 +1191,20 @@ class MainActivity : Activity(), AppleRepository.Listener {
                             device in locationSync.pencils.map { it.asDevice() }
                     )
                         locationSync.refresh()
+                    else if (device.provider == DeviceProvider.GOOGLE) google.refresh(device.id)
                     else repository.refresh()
                 }
             }
         )
         val shared = sharedEntries().firstOrNull { it.id == device.id }
-        content.addView(label(shared?.source ?: getString(R.string.location_only), 11, Ui.muted))
+        content.addView(
+            label(
+                if (device.provider == DeviceProvider.GOOGLE) getString(R.string.google_source)
+                else shared?.source ?: getString(R.string.location_only),
+                11,
+                Ui.muted,
+            )
+        )
         body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
     }
 
@@ -1224,6 +1255,35 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 },
                 LinearLayout.LayoutParams(-1, dp(48)),
             )
+        space(content, 24)
+        content.addView(label("Google Find Hub", 18, Ui.ink, true))
+        space(content, 8)
+        content.addView(
+            label(
+                getString(
+                    if (google.connected) R.string.google_connected else R.string.google_help
+                ),
+                13,
+                Ui.muted,
+            )
+        )
+        space(content, 12)
+        content.addView(
+            actionButton(getString(R.string.google_connect), false).apply {
+                id = GOOGLE_CONNECT_ID
+                setOnClickListener { connectGoogle() }
+            },
+            LinearLayout.LayoutParams(-1, dp(50)),
+        )
+        if (google.connected) {
+            space(content, 8)
+            content.addView(
+                actionButton(getString(R.string.google_disconnect), false).apply {
+                    setOnClickListener { google.disconnect() }
+                },
+                LinearLayout.LayoutParams(-1, dp(48)),
+            )
+        }
         space(content, 12)
         content.addView(
             actionButton(getString(R.string.appearance_map), false).apply {
@@ -1260,6 +1320,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
         )
         scroll.addView(content)
         body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+    }
+
+    private fun connectGoogle() {
+        startActivityForResult(Intent(this, GoogleAuthActivity::class.java), 30)
     }
 
     private fun connect() {
@@ -1500,8 +1564,9 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     override fun onChanged() {
         statusPill.text =
-            if (repository.loading || locationSync.loading) getString(R.string.updating)
-            else if (repository.hasSession || locationSync.configured)
+            if (repository.loading || google.loading || locationSync.loading)
+                getString(R.string.updating)
+            else if (repository.hasSession || google.connected || locationSync.configured)
                 getString(R.string.find_title)
             else "Find Bridge"
         if (pageMotion.running) pendingRender = true else renderSheet()
@@ -1512,6 +1577,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 30 && resultCode == RESULT_OK) {
+            data?.getStringExtra(GoogleAuthActivity.SNAPSHOT)?.let { google.accept(it) }
+            fitted = false
+        }
         if (requestCode == 10) {
             connecting = false
             if (resultCode == RESULT_OK) {
@@ -1553,6 +1622,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     override fun onResume() {
         super.onResume()
         foreground = true
+        google.setForeground(true)
         mapView.onResume()
         onChanged()
         repository.refresh()
@@ -1562,6 +1632,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     override fun onPause() {
         foreground = false
+        google.setForeground(false)
         handler.removeCallbacks(periodicRefresh)
         sheetSpring?.cancel()
         mapView.onPause()
@@ -1577,6 +1648,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
 
     override fun onDestroy() {
         repository.removeListener(this)
+        google.removeListener(this)
         locationSync.removeListener(this)
         panel?.dismiss(immediate = true)
         pageMotion.finish()
@@ -1638,5 +1710,6 @@ class MainActivity : Activity(), AppleRepository.Listener {
         const val RECENTER_ID = 1010
         const val PANEL_ID = 1011
         const val SELECTED_PIN_ID = 1012
+        const val GOOGLE_CONNECT_ID = 1013
     }
 }

@@ -113,4 +113,12 @@
     <plurals name="days_ago">
         <item quantity="other">%d天前</item>
     </plurals>
+    <string name="google_connect">連接 Google 帳號</string>
+    <string name="google_disconnect">中斷 Google 帳號連線</string>
+    <string name="google_connected">Google 帳號已連接</string>
+    <string name="google_help">在同一張地圖上查看 Android 和 Apple 裝置。</string>
+    <string name="google_loading">正在載入 Android 裝置…</string>
+    <string name="google_auth_help">如需密碼或身分驗證，請在 Google 官方畫面輸入。</string>
+    <string name="google_sign_in_needed">請重新登入 Google 以更新 Android 位置。</string>
+    <string name="google_source">位置來源：Google Find Hub。離線位置可能需要 Google 身分驗證。</string>
 </resources>

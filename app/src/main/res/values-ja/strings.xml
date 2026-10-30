@@ -113,4 +113,12 @@
     <plurals name="days_ago">
         <item quantity="other">%d日前</item>
     </plurals>
+    <string name="google_connect">Googleアカウントに接続</string>
+    <string name="google_disconnect">Googleアカウントの接続を解除</string>
+    <string name="google_connected">Googleアカウントに接続済み</string>
+    <string name="google_help">AndroidとAppleのデバイスを同じ地図に表示します。</string>
+    <string name="google_loading">Androidのデバイスを読み込み中…</string>
+    <string name="google_auth_help">パスワードや本人確認が必要な場合は、Googleの公式画面で入力してください。</string>
+    <string name="google_sign_in_needed">Androidの位置を更新するには、Googleに再接続してください。</string>
+    <string name="google_source">位置情報の取得元：Google Find Hub。オフラインの位置にはGoogleの本人確認が必要な場合があります。</string>
 </resources>

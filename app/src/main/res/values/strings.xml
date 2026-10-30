@@ -116,4 +116,12 @@
         <item quantity="one">%d day ago</item>
         <item quantity="other">%d days ago</item>
     </plurals>
+    <string name="google_connect">Connect Google Account</string>
+    <string name="google_disconnect">Disconnect Google Account</string>
+    <string name="google_connected">Google Account connected</string>
+    <string name="google_help">See your Android devices alongside your Apple devices.</string>
+    <string name="google_loading">Loading your Android devices…</string>
+    <string name="google_auth_help">Google may ask for your password or verification in its official screen.</string>
+    <string name="google_sign_in_needed">Sign in to Google again to update Android locations.</string>
+    <string name="google_source">Location from Google Find Hub. Google may require verification for offline locations.</string>
 </resources>

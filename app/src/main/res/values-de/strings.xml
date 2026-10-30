@@ -116,4 +116,12 @@
         <item quantity="one">Vor %d Tag</item>
         <item quantity="other">Vor %d Tagen</item>
     </plurals>
+    <string name="google_connect">Google-Konto verbinden</string>
+    <string name="google_disconnect">Google-Konto trennen</string>
+    <string name="google_connected">Google-Konto verbunden</string>
+    <string name="google_help">Android- und Apple-Geräte auf derselben Karte sehen.</string>
+    <string name="google_loading">Android-Geräte werden geladen…</string>
+    <string name="google_auth_help">Gib Passwort und Bestätigung bei Bedarf auf der offiziellen Google-Seite ein.</string>
+    <string name="google_sign_in_needed">Melde dich erneut bei Google an, um Android-Standorte zu aktualisieren.</string>
+    <string name="google_source">Standort von Google Find Hub. Offline-Standorte können eine Bestätigung bei Google erfordern.</string>
 </resources>

@@ -14,6 +14,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FindBridge"
         android:usesCleartextTraffic="false">
+        <activity android:name=".GoogleAuthActivity" android:exported="false"
+            android:process=":google" android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+        <service android:name=".GoogleLocationService" android:exported="false" android:process=":google" />
         <activity android:name=".LoginActivity" android:exported="false"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:windowSoftInputMode="adjustResize" />

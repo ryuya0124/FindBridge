@@ -62,6 +62,30 @@ class SavedLoginFormLiveTest {
                     SystemClock.sleep(100)
                 }
                 assertTrue("The saved login must load into the native form", restored)
+                if (InstrumentationRegistry.getArguments().getString("keyboard") == "true") {
+                    instrumentation.runOnMainSync {
+                        val field = activity.findViewById<EditText>(LoginActivity.ACCOUNT_ID)
+                        field.requestFocus()
+                        activity
+                            .getSystemService(
+                                android.view.inputmethod.InputMethodManager::class.java
+                            )
+                            .showSoftInput(
+                                field,
+                                android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT,
+                            )
+                    }
+                    SystemClock.sleep(1500)
+                    if (android.os.Build.VERSION.SDK_INT >= 30)
+                        instrumentation.runOnMainSync {
+                            assertTrue(
+                                "The physical-device variant requires a visible software keyboard",
+                                activity.window.decorView.rootWindowInsets.isVisible(
+                                    android.view.WindowInsets.Type.ime()
+                                ),
+                            )
+                        }
+                }
                 instrumentation.runOnMainSync {
                     assertTrue(
                         activity.findViewById<EditText>(LoginActivity.PASSWORD_ID).text.isEmpty()

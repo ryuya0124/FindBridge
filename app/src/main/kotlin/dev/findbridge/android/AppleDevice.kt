@@ -3,6 +3,12 @@ package dev.findbridge.android
 import android.content.Context
 import org.json.JSONObject
 
+internal enum class DeviceProvider {
+    APPLE,
+    GOOGLE,
+    SHARED,
+}
+
 internal data class AppleDevice(
     val id: String,
     val name: String,
@@ -20,6 +26,8 @@ internal data class AppleDevice(
     val ownerId: String = "",
     val ownerName: String = "",
     val locationEnabled: Boolean = true,
+    val provider: DeviceProvider = DeviceProvider.APPLE,
+    val reportedStatus: String = "",
 ) {
     val located: Boolean
         get() = latitude != null && longitude != null
@@ -83,10 +91,13 @@ internal data class AppleDevice(
         )
     }
 
-    fun subtitle(context: Context): String = address.ifBlank {
-        if (located) context.getString(R.string.located_status, statusText(context))
-        else statusText(context)
-    }
+    fun subtitle(context: Context): String =
+        reportedStatus
+            .ifBlank { address }
+            .ifBlank {
+                if (located) context.getString(R.string.located_status, statusText(context))
+                else statusText(context)
+            }
 
     fun batteryText(): String =
         battery

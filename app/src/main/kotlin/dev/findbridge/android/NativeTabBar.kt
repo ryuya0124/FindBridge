@@ -1,6 +1,9 @@
 package dev.findbridge.android
 
 import android.app.Activity
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -42,7 +45,22 @@ internal class NativeTabBar(
         background = GlassDrawable(scene, this, activity.dp(36).toFloat(), .24f)
         elevation = activity.dp(8).toFloat()
         clipToOutline = true
-        selection.background = GlassDrawable(scene, selection, activity.dp(30).toFloat(), .10f)
+        val selectedGlass = GlassDrawable(scene, selection, activity.dp(30).toFloat(), .10f)
+        selection.background =
+            if (Ui.dark)
+                LayerDrawable(
+                    arrayOf(
+                        selectedGlass,
+                        GradientDrawable().apply {
+                            shape = GradientDrawable.RECTANGLE
+                            cornerRadius = activity.dp(30).toFloat()
+                            // Keep a stable selected surface even over bright aerial imagery.
+                            setColor(0xf23a3a42.toInt())
+                            setStroke(activity.dp(1), 0x4dffffff)
+                        },
+                    )
+                )
+            else selectedGlass
         addView(
             selection,
             LayoutParams(1, activity.dp(60)).apply {
@@ -128,7 +146,10 @@ internal class NativeTabBar(
             val color = if (i == index) Ui.green else Ui.muted
             button.isSelected = i == index
             (button.getChildAt(0) as TabGlyph).tint = color
-            (button.getChildAt(1) as TextView).setTextColor(color)
+            (button.getChildAt(1) as TextView).apply {
+                setTextColor(color)
+                typeface = if (i == index) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            }
         }
     }
 }
