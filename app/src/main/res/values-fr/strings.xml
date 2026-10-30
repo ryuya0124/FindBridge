@@ -189,4 +189,5 @@
     <string name="google_action_unknown">Le résultat est inconnu. Actualisez les informations avant de réessayer.</string>
     <string name="google_lost_explanation">L’appareil sera verrouillé et affichera vos coordonnées. Selon ses réglages, il pourra se déconnecter de Google, supprimer des cartes de paiement de Wallet ou demander une vérification supplémentaire.</string>
     <string name="google_sound_confirmation">Faire sonner %1$s au volume maximal pendant cinq minutes au maximum ?</string>
+    <string name="apple_session_restore_failed">La session Apple enregistrée n’a pas pu être restaurée. Reconnectez-vous.</string>
 </resources>

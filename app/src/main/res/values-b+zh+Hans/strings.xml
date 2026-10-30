@@ -183,4 +183,5 @@
     <string name="google_action_unknown">无法确认结果。请在重试前刷新设备信息。</string>
     <string name="google_lost_explanation">锁定设备并显示你的联系信息。根据设备设置，设备可能会退出 Google 账号、移除 Google 钱包中的支付卡，或要求额外的身份验证。</string>
     <string name="google_sound_confirmation">要在 %1$s 上以最大音量响铃最多五分钟吗？</string>
+    <string name="apple_session_restore_failed">无法恢复已保存的 Apple 会话。请重新连接。</string>
 </resources>

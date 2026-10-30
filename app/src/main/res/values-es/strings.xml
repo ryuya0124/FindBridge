@@ -189,4 +189,5 @@
     <string name="google_action_unknown">Se desconoce el resultado. Actualiza la información antes de volver a intentarlo.</string>
     <string name="google_lost_explanation">Se bloqueará el dispositivo y se mostrarán tus datos de contacto. Según su configuración, puede cerrar la sesión de Google, eliminar tarjetas de Wallet o pedir verificaciones adicionales de identidad.</string>
     <string name="google_sound_confirmation">¿Hacer sonar %1$s al máximo volumen durante hasta cinco minutos?</string>
+    <string name="apple_session_restore_failed">No se pudo restaurar la sesión de Apple guardada. Vuelve a conectarte.</string>
 </resources>

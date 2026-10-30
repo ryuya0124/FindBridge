@@ -60,6 +60,7 @@ class AuthActivity : Activity() {
     private var readyEpoch = 0
     private var imeWasVisible = false
     private var mainLoadFailed = false
+    private var sessionRejected = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Ui.configure(this)
@@ -159,7 +160,16 @@ class AuthActivity : Activity() {
                         setOnClickListener {
                             errorView.visibility = View.GONE
                             submittedStages.clear()
-                            webView.loadUrl(UrlPolicy.findUrl)
+                            if (sessionRejected) {
+                                sessionRejected = false
+                                // Explicit recovery discards only transient sessions. Persistent
+                                // trusted-browser cookies are kept; account changes use logout.
+                                CookieManager.getInstance().removeSessionCookies {
+                                    CookieManager.getInstance().flush()
+                                    if (!isFinishing && !isDestroyed)
+                                        webView.loadUrl(UrlPolicy.findUrl)
+                                }
+                            } else webView.loadUrl(UrlPolicy.findUrl)
                         }
                     },
                     LinearLayout.LayoutParams(-1, dp(52)),
@@ -310,15 +320,35 @@ class AuthActivity : Activity() {
             return
         }
         val origins = setOf("https://www.icloud.com", "https://www.icloud.com.cn")
+        WebViewCompat.addWebMessageListener(webView, "FindBridgeSessionState", origins) {
+            _,
+            message,
+            sourceOrigin,
+            mainFrame,
+            _ ->
+            if (
+                mainFrame &&
+                    sourceOrigin.toString().trimEnd('/') in origins &&
+                    message.data == "authenticationRequired" &&
+                    !captured
+            ) {
+                sessionRejected = true
+                (errorView.getChildAt(0) as TextView).setText(R.string.sign_in_required)
+                (errorView.getChildAt(1) as TextView).setText(R.string.apple_session_restore_failed)
+                errorView.visibility = View.VISIBLE
+            }
+        }
         WebViewCompat.addWebMessageListener(webView, "FindBridgeData", origins) {
             _,
             message,
-            _,
-            _,
+            sourceOrigin,
+            mainFrame,
             _ ->
             val data = message.data
             if (
                 !captured &&
+                    mainFrame &&
+                    sourceOrigin.toString().trimEnd('/') in origins &&
                     data != null &&
                     AppleRepository.get(this)
                         .acceptAuthenticatedResponse(data, webView.settings.userAgentString)
@@ -368,6 +398,7 @@ class AuthActivity : Activity() {
                     Toast.makeText(this, R.string.auto_paused, Toast.LENGTH_LONG).show()
                 }
                 "verification" -> {
+                    errorView.visibility = View.GONE
                     automaticStatus.visibility = View.GONE
                     origin.visibility = View.VISIBLE
                     webView.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO

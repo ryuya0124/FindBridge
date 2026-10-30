@@ -80,7 +80,7 @@ internal object LostMode {
 
     fun result(response: JSONObject, deviceId: String): LostModeResult {
         val globalCode = response.optString("statusCode")
-        if (globalCode in setOf("401", "403", "421", "450")) return LostModeResult.AUTH_REQUIRED
+        if (globalCode in setOf("401", "421", "450")) return LostModeResult.AUTH_REQUIRED
         if (globalCode.isNotBlank() && globalCode != "200") return LostModeResult.REJECTED
         if (response.has("alert") && !response.isNull("alert")) return LostModeResult.UNKNOWN
         val content = response.optJSONArray("content")
@@ -94,14 +94,6 @@ internal object LostMode {
         if (actionCode == "200" || actionCode == "205") return LostModeResult.REQUESTED
         if (!actionCode.isNullOrBlank()) return LostModeResult.REJECTED
         if (target != null && state(target) != LostModeState.OFF) return LostModeResult.REQUESTED
-        return when (response.optString("statusCode")) {
-            "200" -> LostModeResult.REQUESTED
-            "401",
-            "403",
-            "421",
-            "450" -> LostModeResult.AUTH_REQUIRED
-            "" -> LostModeResult.UNKNOWN
-            else -> LostModeResult.REJECTED
-        }
+        return if (globalCode == "200") LostModeResult.REQUESTED else LostModeResult.UNKNOWN
     }
 }

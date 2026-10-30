@@ -186,4 +186,5 @@
     <string name="google_action_unknown">The result is unknown. Refresh device information before trying again.</string>
     <string name="google_lost_explanation">This locks the device and displays your contact details. Depending on its settings, the device may sign out of Google, remove Wallet payment cards, or require additional identity verification.</string>
     <string name="google_sound_confirmation">Ring %1$s at full volume for up to five minutes?</string>
+    <string name="apple_session_restore_failed">The saved Apple session could not be restored. Reconnect to continue.</string>
 </resources>

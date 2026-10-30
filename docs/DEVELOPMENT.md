@@ -8,6 +8,18 @@
 
 `apple-session.js` は公式ページの読み取り用応答をKotlinへ渡す小さなアダプターです。AndroidXのorigin制限付きメッセージリスナーを使用し、パスワードや確認コードにはアクセスしません。
 
+Apple接続の責務は次のファイルへ分けています。KotlinはktfmtのKotlinスタイルで整形し、コメントには処理の目的・境界・例外の理由を記載します。
+
+| ファイル | 責務 |
+| --- | --- |
+| `AppleConnectionController.kt` | 既存接続の再利用、認証画面を開く条件、画面復帰 |
+| `AppleTransport.kt` | ネイティブHTTP、操作別URL検証、応答サイズ制限、認証失効の判定 |
+| `AppleSessionCookies.kt` | CookieManagerの完了イベントによるCookie更新、アカウント世代の照合 |
+| `AppleRepository.kt` | 端末・家族情報と接続状態の保持、暗号化保存、UIへの通知 |
+| `LoginActivity.kt` / `AuthActivity.kt` | ネイティブ入力／Apple公式の追加確認 |
+
+保存済みの同じアカウントを利用する際にCookieとWebStorageを全消去しません。明示的なログアウト・アカウントやパスワードの変更は従来どおり分離します。HTTPのSet-CookieをWebViewの同じプロファイルへ反映し、欠損していないCookieヘッダーだけをネイティブの暗号化セッションへ引き継ぎます。HTTP 403だけを認証切れとは判定しません。Appleからのサインイン通知メールを隠す処理や、通知設定の変更はありません。
+
 2026-10-30にレジストリで確認した安定版を固定しています。
 
 | 項目 | バージョン |

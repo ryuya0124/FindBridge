@@ -68,7 +68,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private lateinit var google: GoogleRepository
     private lateinit var loginVault: LoginVault
     private var foreground = false
-    private var connecting = false
+    private lateinit var appleConnection: AppleConnectionController
     private lateinit var locationSync: LocationSyncRepository
     private lateinit var appearance: AppearanceSettings
     private lateinit var glass: GlassScene
@@ -166,6 +166,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         repository = AppleRepository.get(this)
         google = GoogleRepository.get(this)
         loginVault = LoginVault(this)
+        appleConnection = AppleConnectionController(this, repository, loginVault) { foreground }
         locationSync = LocationSyncRepository.get(this)
         root =
             FrameLayout(this).apply {
@@ -1642,47 +1643,12 @@ class MainActivity : Activity(), AppleRepository.Listener {
         )
     }
 
-    private fun connect() {
-        if (connecting) return
-        if (loginVault.hasSaved && loginVault.automatic && !loginVault.paused) {
-            beginAutomaticAuthentication()
-        } else editLogin()
-    }
+    private fun connect() = appleConnection.reconnect()
 
-    private fun editLogin() {
-        if (connecting) return
-        connecting = true
-        startActivityForResult(Intent(this, LoginActivity::class.java), 10)
-    }
+    private fun editLogin() = appleConnection.editCredentials()
 
     private fun maintainLogin() {
-        if (
-            !foreground ||
-                !hasWindowFocus() ||
-                connecting ||
-                (!repository.requiresSignIn && repository.hasSession) ||
-                !loginVault.automaticAllowed()
-        )
-            return
-        beginAutomaticAuthentication()
-    }
-
-    private fun beginAutomaticAuthentication() {
-        connecting = true
-        LoginVault.clearStaged()
-        // An expired native session can still leave the web app in a stale signed-in
-        // state. Reauthenticate only after CookieManager has actually cleared it.
-        repository.logout {
-            if (isFinishing || isDestroyed || !foreground || !hasWindowFocus()) {
-                connecting = false
-                return@logout
-            }
-            loginVault.markAttempt()
-            startActivityForResult(
-                Intent(this, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
-                10,
-            )
-        }
+        if (::appleConnection.isInitialized) appleConnection.maintain()
     }
 
     private fun accountMenu(anchor: View) {
@@ -2048,7 +2014,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             fitted = false
         }
         if (requestCode == 10) {
-            connecting = false
+            appleConnection.completed()
             if (resultCode == RESULT_OK) {
                 fitted = false
                 repository.refresh()

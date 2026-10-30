@@ -186,4 +186,5 @@
     <string name="google_action_unknown">Das Ergebnis ist unbekannt. Aktualisiere die Geräteinformationen vor einem erneuten Versuch.</string>
     <string name="google_lost_explanation">Das Gerät wird gesperrt und deine Kontaktdaten werden angezeigt. Je nach Einstellung kann es sich bei Google abmelden, Wallet-Zahlungskarten entfernen oder zusätzliche Identitätsprüfungen verlangen.</string>
     <string name="google_sound_confirmation">%1$s bis zu fünf Minuten mit voller Lautstärke klingeln lassen?</string>
+    <string name="apple_session_restore_failed">Die gespeicherte Apple-Sitzung konnte nicht wiederhergestellt werden. Bitte erneut verbinden.</string>
 </resources>

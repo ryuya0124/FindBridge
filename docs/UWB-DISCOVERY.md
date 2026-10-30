@@ -113,6 +113,27 @@ python3 tools/verify_uwb_discovery.py --output research/uwb-2026-10-31/synthetic
 python3 tools/verify_uwb_crypto.py --output research/uwb-2026-10-31/synthetic-crypto.json
 ```
 
+## 5. トークン導出のbucket indexのバイト順
+
+macOS 27.2 / 26B123のFindMyBase（LC_UUID `F1E60857-5AB6-3663-AFC7-6B44944BE945`、source version 106.21.6.16.7）の `Swift.FixedWidthInteger.data` getter (`0x1b40180e4`) を追跡しました。値をコピーした後、連続したメモリ範囲をDataに変換しており、バイト反転処理はありません。findmylocateagentのトークン生成側は、このgetterへUInt64の型情報を渡してHKDFのinfoに使用します。
+
+静的解析に加え、ホストの同じgetterを**公開ダミー整数4個だけ**で呼び、Swiftで8バイトをコピーしたData表現と照合しました。0、1、`0x0102030405060708`、UInt64.maxの全件が一致し、例のinfoは `0807060504030201` です。ここから、確認したarm64ビルドでは次の表現と判定できます。
+
+```text
+info = uint64_le(bucket.index)             # 8 bytes
+tokenSecret = HKDF-SHA256(sharedSecret,
+                         salt="NITokenService.salt",
+                         info=info, outputLength=16)
+```
+
+[verify_uwb_token_index.py](../tools/verify_uwb_token_index.py) と [C/Swiftヘルパー](../tools/uwb-token-index/) を追加しました。4種類のinfoによるHKDFもホストCommonCryptoと一致しています。ヘルパーは一時ディレクトリでビルドして終了時に削除します。private ABIが異なるOSへの適用は保証しません。iOSの同じgetterを実行した結果や、実際のトークン取得成功を意味しません。
+
+```bash
+python3 tools/verify_uwb_token_index.py --output research/uwb-token-index/verified.json
+```
+
+この検証で実アカウント・Keychain・デーモンへの要求・BLE・UWBは使用していません。入力sharedSecretも再現用の固定ダミー値です。bucketの有効期間、所有者の鍵取得、対象iPhoneとの接続は引き続き未確認です。
+
 ## 残る接続条件
 
 1. 本人の権限で、対象iPhone用の共有鍵とdiscovery tokenをAndroid側だけから正規に取得・更新する経路。

@@ -37,7 +37,7 @@ internal object AppleNotification {
 
     fun result(response: JSONObject, id: String, enabled: Boolean): Result {
         val code = response.optString("statusCode")
-        if (code in setOf("401", "403", "421", "450")) return Result.AUTH_REQUIRED
+        if (code in setOf("401", "421", "450")) return Result.AUTH_REQUIRED
         if (code.isNotBlank() && code != "200") return Result.FAILED
         if (response.has("alert") && !response.isNull("alert")) return Result.UNKNOWN
         val content = response.optJSONArray("content") ?: return Result.UNKNOWN

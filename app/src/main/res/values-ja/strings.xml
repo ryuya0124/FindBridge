@@ -183,4 +183,5 @@
     <string name="google_action_unknown">結果を確認できませんでした。再送前に端末情報を更新してください。</string>
     <string name="google_lost_explanation">端末をロックし、連絡先とメッセージを表示します。端末の設定によってはGoogleアカウントからのサインアウト、ウォレットの支払いカードの削除、追加の本人確認が行われる場合があります。</string>
     <string name="google_sound_confirmation">%1$sで最大5分間、最大音量のサウンドを鳴らしますか？</string>
+    <string name="apple_session_restore_failed">保存済みのAppleとの接続を復元できませんでした。再接続してください。</string>
 </resources>

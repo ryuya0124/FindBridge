@@ -245,6 +245,10 @@ class LoginActivity : Activity() {
         submit.isEnabled = false
         submit.text = getString(R.string.connecting)
         val login = SavedLogin(email, secret)
+        val reuseAccount =
+            existing?.let {
+                it.account.equals(email, true) && it.password == secret
+            } == true
         val keep = remember.isChecked
         val auto = automatic.isChecked
         worker.execute {
@@ -263,18 +267,33 @@ class LoginActivity : Activity() {
                         }
                         password.text.clear()
                         existing = null
-                        AppleRepository.get(this).logout {
+                        val repository = AppleRepository.get(this)
+                        if (
+                            reuseAccount &&
+                                repository.hasSession &&
+                                repository.nativeTransportVerified &&
+                                !repository.requiresSignIn
+                        ) {
+                            LoginVault.clearStaged()
+                            completed = true
+                            setResult(RESULT_OK)
+                            finish()
+                            return@runOnUiThread
+                        }
+                        val ready: () -> Unit = ready@{
                             if (
                                 isFinishing ||
                                     isDestroyed ||
                                     requestGeneration != credentialGeneration
                             ) {
                                 LoginVault.clearStaged()
-                                return@logout
+                                return@ready
                             }
                             pendingAuthGeneration = requestGeneration
                             launchPendingAuthentication()
                         }
+                        // Only an explicit account/password change starts a separate browser login.
+                        if (reuseAccount) ready() else repository.logout(ready)
                     }
                 }
                 .onFailure {

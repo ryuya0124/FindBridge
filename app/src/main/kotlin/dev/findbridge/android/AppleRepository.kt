@@ -5,9 +5,6 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
 import android.webkit.WebStorage
-import java.io.ByteArrayOutputStream
-import java.net.HttpURLConnection
-import java.net.URI
 import java.util.concurrent.Executors
 import org.json.JSONObject
 
@@ -20,6 +17,7 @@ internal class AppleRepository private constructor(context: Context) {
     }
 
     private val store = SecureSessionStore(context)
+    private val transport = AppleTransport()
     private val executor = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private val listeners = mutableSetOf<Listener>()
@@ -81,6 +79,7 @@ internal class AppleRepository private constructor(context: Context) {
                 val url = message.getString("url")
                 require(UrlPolicy.isReadEndpoint(url))
                 val response = message.getJSONObject("response")
+                require(response.optString("statusCode") in setOf("", "200"))
                 require(response.optJSONArray("content") != null)
                 val originalBody = JSONObject(message.optString("body", "{}"))
                 val client = originalBody.optJSONObject("clientContext") ?: JSONObject()
@@ -143,7 +142,10 @@ internal class AppleRepository private constructor(context: Context) {
         changed()
         executor.execute {
             runCatching {
-                val response = request(snapshot)
+                val response =
+                    transport.send(snapshot, AppleRequestKind.READ) {
+                        generation == requestGeneration
+                    }
                 check(response.optJSONArray("content") != null)
                 response.optJSONObject("serverContext")?.let {
                     snapshot.getJSONObject("body").put("serverContext", it)
@@ -163,10 +165,10 @@ internal class AppleRepository private constructor(context: Context) {
                     main.post {
                         if (generation == requestGeneration) {
                             loading = false
-                            requiresSignIn = failure is AuthenticationExpiredException
+                            requiresSignIn = failure is AppleAuthenticationExpiredException
                             if (requiresSignIn) nativeTransportVerified = false
                             errorRes =
-                                if (failure is AuthenticationExpiredException) {
+                                if (failure is AppleAuthenticationExpiredException) {
                                     R.string.sign_in_required
                                 } else {
                                     R.string.refresh_failed
@@ -199,12 +201,15 @@ internal class AppleRepository private constructor(context: Context) {
         executor.execute {
             val accepted = runCatching {
                 check(generation == requestGeneration)
-                request(snapshot, allowSound = true).optInt("statusCode", 200) == 200
+                transport
+                    .send(snapshot, AppleRequestKind.SOUND) { generation == requestGeneration }
+                    .optInt("statusCode", 200) == 200
             }
                 .getOrDefault(false)
             main.post {
                 sendingSound = false
                 if (generation == requestGeneration) {
+                    retainCookies(snapshot)
                     changed()
                     completed(accepted)
                 }
@@ -233,10 +238,15 @@ internal class AppleRepository private constructor(context: Context) {
         executor.execute {
             val result = runCatching {
                 check(requestGeneration == generation)
-                LostMode.result(send(snapshot, RequestKind.LOST_MODE), id)
+                LostMode.result(
+                    transport.send(snapshot, AppleRequestKind.LOST_MODE) {
+                        generation == requestGeneration
+                    },
+                    id,
+                )
             }
                 .getOrElse {
-                    if (it is AuthenticationExpiredException) LostModeResult.AUTH_REQUIRED
+                    if (it is AppleAuthenticationExpiredException) LostModeResult.AUTH_REQUIRED
                     else LostModeResult.UNKNOWN
                 }
             main.post {
@@ -245,6 +255,7 @@ internal class AppleRepository private constructor(context: Context) {
                     completed(LostModeResult.UNKNOWN)
                     return@post
                 }
+                retainCookies(snapshot)
                 if (result == LostModeResult.AUTH_REQUIRED) {
                     requiresSignIn = true
                     nativeTransportVerified = false
@@ -256,65 +267,15 @@ internal class AppleRepository private constructor(context: Context) {
         }
     }
 
-    private enum class RequestKind {
-        READ,
-        SOUND,
-        LOST_MODE,
-        NOTIFICATION,
-    }
-
-    private fun request(snapshot: JSONObject, allowSound: Boolean = false): JSONObject =
-        send(snapshot, if (allowSound) RequestKind.SOUND else RequestKind.READ)
-
-    private fun send(snapshot: JSONObject, kind: RequestKind): JSONObject {
-        val address = snapshot.getString("url")
-        require(
-            when (kind) {
-                RequestKind.READ -> UrlPolicy.isReadEndpoint(address)
-                RequestKind.SOUND -> UrlPolicy.isSoundEndpoint(address)
-                RequestKind.LOST_MODE -> UrlPolicy.isLostModeEndpoint(address)
-                RequestKind.NOTIFICATION -> UrlPolicy.isNotificationEndpoint(address)
-            }
-        )
-        val connection = URI(address).toURL().openConnection() as HttpURLConnection
-        connection.instanceFollowRedirects = false
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 20_000
-        connection.requestMethod = "POST"
-        connection.setRequestProperty("Content-Type", "text/plain;charset=UTF-8")
-        connection.setRequestProperty("Origin", "https://www.icloud.com")
-        connection.setRequestProperty("Referer", "https://www.icloud.com/")
-        connection.setRequestProperty("User-Agent", snapshot.optString("userAgent"))
-        connection.setRequestProperty("Cookie", snapshot.optString("cookie"))
-        connection.setRequestProperty("Accept", "application/json")
-        connection.doOutput = true
-        try {
-            connection.outputStream.use {
-                it.write(snapshot.getJSONObject("body").toString().toByteArray(Charsets.UTF_8))
-            }
-            when (connection.responseCode) {
-                200 -> Unit
-                401,
-                403,
-                421,
-                450 -> throw AuthenticationExpiredException()
-                else -> error("Apple service unavailable")
-            }
-            val buffer = ByteArrayOutputStream()
-            connection.inputStream.use { input ->
-                val chunk = ByteArray(8192)
-                while (true) {
-                    val count = input.read(chunk)
-                    if (count == -1) break
-                    buffer.write(chunk, 0, count)
-                    check(buffer.size() <= responseLimit)
-                }
-            }
-            return if (kind == RequestKind.SOUND && buffer.size() == 0) JSONObject()
-            else JSONObject(buffer.toString(Charsets.UTF_8.name()))
-        } finally {
-            connection.disconnect()
-        }
+    /** Only cookies are copied back; a command's URL/body must never replace the read session. */
+    private fun retainCookies(snapshot: JSONObject) {
+        val current = session ?: return
+        val updated = snapshot.optString("cookie")
+        if (updated == current.optString("cookie")) return
+        current.put("cookie", updated)
+        val saved = JSONObject(current.toString())
+        val savedGeneration = generation
+        executor.execute { if (generation == savedGeneration) store.save(saved) }
     }
 
     fun logout(afterCookiesCleared: (() -> Unit)? = null) {
@@ -363,15 +324,23 @@ internal class AppleRepository private constructor(context: Context) {
         executor.execute {
             val result = runCatching {
                 check(generation == requestGeneration)
-                AppleNotification.result(send(snapshot, RequestKind.NOTIFICATION), id, enabled)
+                AppleNotification.result(
+                    transport.send(snapshot, AppleRequestKind.NOTIFICATION) {
+                        generation == requestGeneration
+                    },
+                    id,
+                    enabled,
+                )
             }
                 .getOrElse {
-                    if (it is AuthenticationExpiredException) AppleNotification.Result.AUTH_REQUIRED
+                    if (it is AppleAuthenticationExpiredException)
+                        AppleNotification.Result.AUTH_REQUIRED
                     else AppleNotification.Result.UNKNOWN
                 }
             main.post {
                 notificationTarget = null
                 if (generation != requestGeneration) return@post
+                retainCookies(snapshot)
                 if (result == AppleNotification.Result.SAVED)
                     devices = devices.map {
                         if (it.id == id) it.copy(notifyWhenFound = enabled) else it
@@ -386,10 +355,8 @@ internal class AppleRepository private constructor(context: Context) {
         }
     }
 
-    private class AuthenticationExpiredException : Exception()
-
     companion object {
-        private const val responseLimit = 4_000_000
+        private const val responseLimit = AppleTransport.RESPONSE_LIMIT
         @Volatile private var instance: AppleRepository? = null
 
         fun get(context: Context): AppleRepository =

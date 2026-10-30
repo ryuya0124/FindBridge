@@ -183,4 +183,5 @@
     <string name="google_action_unknown">결과를 확인할 수 없습니다. 다시 보내기 전에 기기 정보를 새로고침하세요.</string>
     <string name="google_lost_explanation">기기를 잠그고 연락처를 표시합니다. 기기 설정에 따라 Google 계정에서 로그아웃하거나 월렛 결제 카드를 삭제하거나 추가 본인 확인을 요구할 수 있습니다.</string>
     <string name="google_sound_confirmation">%1$s에서 최대 5분 동안 최대 음량으로 울릴까요?</string>
+    <string name="apple_session_restore_failed">저장된 Apple 연결을 복원하지 못했습니다. 다시 연결해 주세요.</string>
 </resources>
