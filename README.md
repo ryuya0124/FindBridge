@@ -57,7 +57,7 @@ adb -s emulator-5556 install -r app/build/outputs/apk/debug/app-debug.apk
 adb -s emulator-5556 shell am start -n dev.findbridge.android/.MainActivity
 ```
 
-GitHub Actionsも同じビルド・Lint・単体テストを実行し、開発用APKを成果物に保存します。リポジトリは非公開です。ストア配信用署名は含みません。
+GitHub Actionsも同じビルド・Lint・単体テストを実行します。開発用APKは非公開GitHub Releaseに保存しています。リポジトリは非公開です。ストア配信用署名は含みません。
 
 ## 検証
 
