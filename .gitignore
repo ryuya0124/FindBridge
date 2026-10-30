@@ -13,3 +13,4 @@ research/
 .DS_Store
 
 .codex-attachments/
+__pycache__/
