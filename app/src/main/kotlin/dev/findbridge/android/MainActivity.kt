@@ -298,7 +298,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun roundButton(glyph: String, description: String) =
-        Button(this).apply {
+        RefreshButton(this).apply {
             text = glyph
             textSize = 23f
             isAllCaps = false
@@ -866,7 +866,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 elevation = 0f
                 setTextColor(Ui.blue)
                 isEnabled = !repository.loading && !google.loading
-                if (repository.loading || google.loading) NativeMotion.spin(this)
+                refreshing = repository.loading || google.loading
                 setOnClickListener {
                     repository.refresh()
                     google.refresh()
@@ -973,7 +973,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 elevation = 0f
                 setTextColor(Ui.blue)
                 isEnabled = !locationSync.loading
-                if (locationSync.loading) NativeMotion.spin(this)
+                refreshing = locationSync.loading
                 setOnClickListener { locationSync.refresh() }
             },
             LinearLayout.LayoutParams(dp(44), dp(44)),

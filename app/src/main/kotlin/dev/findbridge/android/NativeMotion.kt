@@ -1,13 +1,11 @@
 package dev.findbridge.android
 
-import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.animation.LinearInterpolator
 import android.view.animation.PathInterpolator
 import androidx.dynamicanimation.animation.DynamicAnimation
 import androidx.dynamicanimation.animation.FloatPropertyCompat
@@ -117,30 +115,8 @@ internal object NativeMotion {
         )
     }
 
-    fun spin(view: View) {
-        if (reduced(view.context)) return
-        val animator =
-            ObjectAnimator.ofFloat(view, View.ROTATION, 0f, 360f).apply {
-                duration = 850
-                repeatCount = ValueAnimator.INFINITE
-                interpolator = LinearInterpolator()
-            }
-        view.addOnAttachStateChangeListener(
-            object : View.OnAttachStateChangeListener {
-                override fun onViewAttachedToWindow(v: View) {
-                    animator.start()
-                }
-
-                override fun onViewDetachedFromWindow(v: View) {
-                    animator.cancel()
-                    v.removeOnAttachStateChangeListener(this)
-                }
-            }
-        )
-        if (view.isAttachedToWindow) animator.start()
-    }
-
     fun cancelTree(view: View) {
+        if (view is RefreshButton) view.stopIndicator()
         view.animate().cancel()
         springs(view).values.forEach { it.cancel() }
         if (view is ViewGroup) for (i in 0 until view.childCount) cancelTree(view.getChildAt(i))
