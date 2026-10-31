@@ -260,3 +260,8 @@ GoogleではGMSの本人情報確認後、ネイティブ画面の「Find Hubへ
 `LiveGlassRenderingTest` は地図の背景色を変え、コピー処理のpendingを固定しても実ウィンドウのガラス部分へ新しい色が届くことをPixelCopyで確認します。PixelCopyはこの出力検証にだけ使用し、製品のGPU描画には使いません。`MapIdleRenderingTest` は標準・航空写真の移動中の実描画、ガラス更新回数、静止時の地図フレーム・共有ノード更新の停止を測定します。
 
 `GlassPopup` は表示設定とアカウントの三点メニューで共通のガラス・角丸・ばねの動き・外側タップ／戻る操作を管理します。アカウントのメニューは一覧と同じ物理ペイン内へ配置します。切断は従来どおり確認ダイアログを経由します。`AccountMenuUiTest` の接続済み表示は明示的なfixtureで、実際の認証・切断は呼びません。
+
+
+## 重なったウィンドウの暗転
+
+`OverlayDimming` はライト24%・ダーク32%の暗転量を共通化します。`GlassPanel` は前面のガラスより下にあるscrimへ適用し、既存の180msの表示・150msの解除を維持します。`GlassPopup` は表示後の自身のウィンドウへ [FLAG_DIM_BEHINDとdimAmount](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_DIM_BEHIND) を設定し、親パネルを含む背後の画面を暗くします。ポップアップを破棄すると、その暗転もOSが解除します。ガラスの材質・ぼかし・画像の取得経路は変更しません。
