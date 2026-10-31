@@ -72,6 +72,7 @@ internal class GlassPopup(
                         (visible.right - width).coerceAtLeast(visible.left),
                     )
                 showAsDropDown(anchor, left - position[0], offset, Gravity.LEFT)
+                OverlayDimming.apply(this)
             }
         if (!NativeMotion.reduced(activity)) {
             card.addOnLayoutChangeListener(

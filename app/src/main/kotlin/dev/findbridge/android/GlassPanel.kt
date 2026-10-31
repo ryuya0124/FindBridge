@@ -44,6 +44,7 @@ internal class GlassPanel(
             }
             .apply { orientation = LinearLayout.VERTICAL }
     private val scrim = View(activity)
+    private val dimAmount = OverlayDimming.amount
     private var closing = false
     private val accessibility = mutableMapOf<View, Int>()
 
@@ -162,14 +163,14 @@ internal class GlassPanel(
     private fun reveal() {
         if (closing) return
         if (NativeMotion.reduced(context)) {
-            scrim.alpha = .10f
+            scrim.alpha = dimAmount
             return
         }
         panel.alpha = 0f
         panel.scaleX = .86f
         panel.scaleY = .86f
         panel.animate().alpha(1f).setDuration(130).setInterpolator(NativeMotion.ease).start()
-        scrim.animate().alpha(.10f).setDuration(180).start()
+        scrim.animate().alpha(dimAmount).setDuration(180).start()
         NativeMotion.spring(panel, DynamicAnimation.SCALE_X, 1f, 510f, .87f)
         NativeMotion.spring(panel, DynamicAnimation.SCALE_Y, 1f, 510f, .87f)
     }
