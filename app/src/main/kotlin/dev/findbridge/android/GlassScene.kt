@@ -11,6 +11,7 @@ import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
+import android.view.ViewTreeObserver
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 import org.maplibre.android.camera.CameraPosition
@@ -30,6 +31,37 @@ internal class GlassScene(private val mapView: View) {
     private var cameraSample: CameraSample? = null
     private var movingMap: MapLibreMap? = null
     private var lastCapturedCamera: CameraPosition? = null
+    private val live =
+        if (android.os.Build.VERSION.SDK_INT >= 33)
+            ((mapView as? MapView)?.renderView as? TextureView)?.let(::LiveGlassBackdrop)
+        else null
+    val liveBackdrop: LiveGlassBackdrop?
+        get() = if (android.os.Build.VERSION.SDK_INT >= 33) live?.takeIf { it.ready } else null
+
+    private var liveDirty = true
+    private val retired = mutableSetOf<GpuGlassBuffer.Frame>()
+    private val preDraw = ViewTreeObserver.OnPreDrawListener {
+        if (
+            android.os.Build.VERSION.SDK_INT >= 33 &&
+                !disposed &&
+                active &&
+                live != null &&
+                (liveDirty || movingMap != null || live.width != width || live.height != height)
+        ) {
+            val previous = live.frame
+            if (live.update()) {
+                liveDirty = false
+                invalidate()
+                previous?.let(::retire)
+            }
+        }
+        true
+    }
+
+    init {
+        mapView.viewTreeObserver.addOnPreDrawListener(preDraw)
+    }
+
     private val motionFrame =
         object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
@@ -75,7 +107,55 @@ internal class GlassScene(private val mapView: View) {
         observers += WeakReference(drawable)
     }
 
+    /** Keep a sampled buffer until every visible consumer window commits its replacement. */
+    @androidx.annotation.RequiresApi(33)
+    private fun retire(frame: GpuGlassBuffer.Frame) {
+        val roots =
+            observers
+                .mapNotNull { it.get()?.host }
+                .filter { it.isAttachedToWindow && it.isShown }
+                .map { it.rootView }
+                .distinct()
+        if (roots.isEmpty()) {
+            frame.close()
+            return
+        }
+        retired += frame
+        var remaining = roots.size
+        roots.forEach { root ->
+            var finished = false
+            lateinit var detached: View.OnAttachStateChangeListener
+            fun acknowledge() {
+                handler.post {
+                    if (!finished) {
+                        finished = true
+                        root.removeOnAttachStateChangeListener(detached)
+                        remaining--
+                        if (remaining == 0) {
+                            retired.remove(frame)
+                            frame.close()
+                            if (liveDirty && !disposed) onMapFrame()
+                        }
+                    }
+                }
+            }
+            detached =
+                object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(view: View) = Unit
+
+                    override fun onViewDetachedFromWindow(view: View) = acknowledge()
+                }
+            root.addOnAttachStateChangeListener(detached)
+            root.viewTreeObserver.registerFrameCommitCallback { acknowledge() }
+            root.postInvalidateOnAnimation()
+        }
+    }
+
     fun capture(map: MapLibreMap, immediate: Boolean = false) {
+        if (live != null) {
+            onMapFrame()
+            return
+        }
         if (disposed || !active || pending || width == 0 || height == 0) return
         val moving = movingMap != null
         val position = map.cameraPosition
@@ -123,6 +203,10 @@ internal class GlassScene(private val mapView: View) {
 
     /** Reprojects the latest pixels on every display frame, independently of GPU readback. */
     fun trackCamera(map: MapLibreMap) {
+        if (live != null) {
+            onMapFrame()
+            return
+        }
         val sample = cameraSample
         viewportTransform.reset()
         if (sample != null && sample.width == width && sample.height == height) {
@@ -144,7 +228,15 @@ internal class GlassScene(private val mapView: View) {
         if (disposed || !active || movingMap != null) return
         movingMap = map
         lastCapturedCamera = null
-        Choreographer.getInstance().postFrameCallback(motionFrame)
+        if (live == null) Choreographer.getInstance().postFrameCallback(motionFrame)
+        else onMapFrame()
+    }
+
+    /** Camera and renderer events request the next actual draw, without a sampling timer. */
+    fun onMapFrame() {
+        if (disposed || !active || live == null) return
+        liveDirty = true
+        mapView.postInvalidateOnAnimation()
     }
 
     fun stopTracking() {
@@ -154,7 +246,7 @@ internal class GlassScene(private val mapView: View) {
 
     fun setActive(value: Boolean) {
         active = value
-        if (!value) stopTracking()
+        if (!value) stopTracking() else onMapFrame()
     }
 
     /**
@@ -162,7 +254,7 @@ internal class GlassScene(private val mapView: View) {
      * phone/tablet framebuffer and allocating another scaled image on every update.
      */
     private fun copyBackdrop(map: MapLibreMap, consume: (Bitmap) -> Unit) {
-        val targetWidth = minOf(width, if (movingMap != null) 320 else 640)
+        val targetWidth = minOf(width, 640)
         val targetHeight = (height.toLong() * targetWidth / width).toInt().coerceAtLeast(1)
         fun fallback() {
             if (disposed) {
@@ -222,8 +314,16 @@ internal class GlassScene(private val mapView: View) {
     }
 
     fun dispose() {
+        if (disposed) return
         disposed = true
         stopTracking()
+        if (mapView.viewTreeObserver.isAlive)
+            mapView.viewTreeObserver.removeOnPreDrawListener(preDraw)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            live?.dispose()
+            retired.forEach { it.close() }
+        }
+        retired.clear()
         worker.shutdown()
         observers.clear()
         bitmap = null

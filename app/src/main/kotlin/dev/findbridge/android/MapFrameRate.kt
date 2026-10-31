@@ -4,7 +4,6 @@ import android.app.Activity
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
-import kotlin.math.ceil
 import org.maplibre.android.maps.MapView
 
 /** Requests the panel's native cadence during movement and releases that vote when idle. */
@@ -12,7 +11,6 @@ internal class MapFrameRate(private val activity: Activity, private val map: Map
     private val displays = activity.getSystemService(DisplayManager::class.java)
     private var moving = false
     private var registered = false
-    private var lastMaximum = 0
     private val originalRate = activity.window.attributes.preferredRefreshRate
     private val changed =
         object : DisplayManager.DisplayListener {
@@ -46,12 +44,8 @@ internal class MapFrameRate(private val activity: Activity, private val map: Map
                         it.physicalHeight == mode.physicalHeight
                 }
                 .maxOfOrNull { it.refreshRate } ?: display.refreshRate
-        val desired = if (moving) fastest else display.refreshRate
-        val maximum = ceil(desired.toDouble()).toInt().coerceAtLeast(1)
-        if (maximum != lastMaximum) {
-            map.setMaximumFps(maximum)
-            lastMaximum = maximum
-        }
+        // Surface synchronization paces rendering. Avoid the library's extra
+        // sleep before buffer swap, which can make a texture miss display frames.
         val vote = if (moving) fastest else originalRate
         if (activity.window.attributes.preferredRefreshRate != vote) {
             activity.window.attributes =
