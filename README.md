@@ -4,9 +4,9 @@ AndroidからAppleデバイスの位置を確認する非公式アプリです�
 
 ## インストール
 
-[GitHubのプレビュー版](https://github.com/ryuya0124/FindBridge/releases/tag/v3.3.0-rc7)から `FindBridge-3.3.0-rc7-arm64-release.apk` をダウンロードしてインストールできます。
+[GitHubのプレビュー版](https://github.com/ryuya0124/FindBridge/releases/tag/v3.3.0-rc8)から `FindBridge-3.3.0-rc8-arm64-release.apk` をダウンロードしてインストールできます。
 
-3.3.0-rc7では、ウィンドウやメニューを重ねたときに背後の画面を暗くし、手前の内容を読み取りやすくしました。メニューを閉じると、元の明るさへ戻ります。
+3.3.0-rc8では、ウィンドウやメニューの背後にかかる半透明の黒を濃くし、手前の内容がより際立つようにしました。閉じると元の明るさへ戻ります。
 
 - Android 9以降のarm64端末に対応。Android 17 / API 37を対象にしています。
 - 3.0.0から専用のリリース鍵で署名しています。以前のdebug版を使っている場合は、一度アンインストールしてから入れ直してください。Apple Accountへの再接続が必要です。
