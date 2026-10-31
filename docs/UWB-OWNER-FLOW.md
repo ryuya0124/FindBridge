@@ -75,11 +75,33 @@ R6はFiRaのアクセサリーとの測距と、双方で設定データを交�
 
 今回の読み取りでも、公開される方式はFiRa・CCC・Aliroで、チャンネル9、UCI 3、FiRa PHY/MAC 1.3〜3.0、国コードJPでした。方位角の能力値は0です。[前回の公開APIコールバック](UWB-GALAXY.md)とも整合します。NBAMMSに対応する能力・設定項目は返っていません。
 
-`persist.vendor.qti.uwb.soc=ganges` を読み取りました。FiRaの[WCN788xの認証情報](https://www.firaconsortium.org/certifications/certified-devices/wcn788x-core-4)のGANGESというファームウェア名と、リンク先の[FastConnect 7900](https://www.qualcomm.com/wi-fi/products/fastconnect/fastconnect-7900)は製品系列の手掛かりですが、実機からチップ品番WCN788xを直接読んだ結果ではありません。SoCはSM8850でした。
+初めは `persist.vendor.qti.uwb.soc=ganges` と、FiRaの[WCN788xの認証情報](https://www.firaconsortium.org/certifications/certified-devices/wcn788x-core-4)のGANGESというファームウェア名から製品系列を推定していました。その後、実機の `CORE_GET_DEVICE_INFO` のDeviceNameから **WCN7881** と直接確認しました。[FastConnect 7900](https://www.qualcomm.com/wi-fi/products/fastconnect/fastconnect-7900)系列のコントローラーです。アプリケーションSoCのSM8850とは区別します。
 
 実機のシステムUWBサービス・HALの静的な文字列、SDK 37.0の `UwbRangingParams` も確認しました。公開設定はFiRaのDS-TWR系で、NBAMMSを選ぶ入口は確認できませんでした。文字列にないことだけで、シリコンの物理的な不対応までは断定しません。チャンネル9が同じでも、波形・認証・開始手順の互換性を意味しません。
 
-Qualcommの[FastConnect 8800の公式資料](https://docs.qualcomm.com/doc/87-97133-1/87-97133-1_REV_AA_Qualcomm_FastConnect_8800_Mobile_Connectivity_System_Product_Brief.pdf)にはNBA-MMSとIEEE 802.15.4abが明記されています。一方、[7900の公式資料](https://docs.qualcomm.com/bundle/publicresource/87-73970-1_REV_C_Qualcomm_FastConnect_7900_Mobile_Connectivity_System_Product_Brief.pdf)は802.15.4z・FiRa・CCCを記載しています。これは製品系列による対応方式の違いを調べる手掛かりであり、このGalaxyの8800搭載やNBAMMS対応、Appleとの互換性、Android APIからの利用可能性を証明するものではありません。
+### ファームウェアから能力情報を直接取得
+
+公開APIが情報を省いている可能性も調べるため、Samsungの独自サービスとファームウェアの返却値を確認しました。解析した `/system/framework/semuwb-service.jar` と実機の同ファイルのSHA-256が一致することを確認してから、**取得専用の2つのコマンド**を使用しています。
+
+| 読み取り | 実機の返却値 |
+| --- | --- |
+| `CORE_GET_DEVICE_INFO` | 成功。DeviceNameはWCN7881、F/Wは00.33.05、UCIは03.00 |
+| `CORE_GET_CAPS_INFO` | 成功。206バイト、能力TLVは50件、全件を境界内で解析、末尾の余り0バイト |
+| サービス・ファームウェアのセッション一覧 | どちらも0件。測距を開始しない状態で確認 |
+
+Samsung側の古いパーサーが名前を持たない3項目も、実機から取得した現行 `service-uwb.jar` の `AliroDecoder` / `GenericDecoder` で照合しました。
+
+| TLV | 現行デコーダーによる意味 |
+| --- | --- |
+| `0xac` | Aliroの対応MAC mode |
+| `0xad` | Aliroの対応protocol version |
+| `0xeb` | 全体の最大対応session数 |
+
+これで取得した50項目すべての用途を照合できました。未解釈の項目をNBAMMSの能力と仮定する余地は残さず、**この能力応答にはNBAMMSを示す項目がない**と確認しています。ファームウェアの全機能の不在や、将来の対応不可まで証明するものではありません。
+
+Samsungの `semuwb_extras` には任意のUCIを渡す経路がありますが、サーバー側で `WRITE_SECURE_SETTINGS` を要求します。一般配布アプリから利用できる公開NBAMMS APIではありません。今回の読み取りでは権限付与・設定変更・callbackの差し替え・session開始・RFテストを行っていません。個体固有の16バイトのchip IDやシステムの履歴ログも公開しません。
+
+Qualcommの[FastConnect 8800の公式資料](https://docs.qualcomm.com/doc/87-97133-1/87-97133-1_REV_AA_Qualcomm_FastConnect_8800_Mobile_Connectivity_System_Product_Brief.pdf)にはNBA-MMSとIEEE 802.15.4abが明記されています。一方、[7900の公式資料](https://docs.qualcomm.com/bundle/publicresource/87-73970-1_REV_C_Qualcomm_FastConnect_7900_Mobile_Connectivity_System_Product_Brief.pdf)はWCN7881を品番として掲載し、802.15.4z・FiRa・CCCを記載しています。8800の仕様を、このGalaxyのNBAMMS対応やAppleとの互換性、Android APIからの利用可能性の証拠にはしません。
 
 またAppleは、日本でPeople FindingやApple Watchの精密探索などが利用できないと[説明しています](https://support.apple.com/en-tm/109512)。Galaxy側の国コードを変える対応は行いません。
 
