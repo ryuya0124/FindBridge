@@ -109,8 +109,19 @@ class RegressionUiTest {
                 scenario.onActivity { activity ->
                     val next = activity.findViewById<View>(MainActivity.PANEL_ID)
                     assertNotNull("The language picker must open", next)
-                    assertEquals(activity.getString(R.string.language), next.accessibilityPaneTitle)
-                    next.findViewById<View>(R.id.panel_done).performClick()
+                    assertEquals(activity.getString(R.string.map_view), next.accessibilityPaneTitle)
+                }
+                val choices =
+                    instrumentation.uiAutomation.rootInActiveWindow
+                        .findAccessibilityNodeInfosByText("日本語")
+                assertTrue(
+                    "The language choices must open above the unchanged settings panel",
+                    choices.isNotEmpty(),
+                )
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    activity.findViewById<View>(R.id.panel_done).performClick()
                 }
             }
         } finally {

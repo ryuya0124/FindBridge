@@ -81,7 +81,9 @@ class GoogleAuthActivity : Activity() {
         // Restored activities do not relaunch a permission dialog that may still be open.
         externalRequest = savedInstanceState?.getInt("external", 0) ?: 0
         busy = externalRequest != 0
-        if (busy) loading() else showMessage(R.string.google_gms_help)
+        if (busy) loading()
+        else if (GoogleRepository.get(this).signedIn) showFindHubConnection()
+        else showMessage(R.string.google_gms_help)
     }
 
     private fun loading() {
@@ -115,6 +117,43 @@ class GoogleAuthActivity : Activity() {
                 setOnClickListener { chooseAccount() }
             },
             LinearLayout.LayoutParams(-1, dp(52)),
+        )
+    }
+
+    /** GMS identity and Find Hub access are separate; do not repeat the account picker. */
+    private fun showFindHubConnection() {
+        busy = false
+        externalRequest = 0
+        pendingConsent = null
+        account = null
+        body.removeAllViews()
+        body.addView(
+            label(getString(R.string.google_identity_ready), 17, Ui.ink).apply {
+                id = STATUS_ID
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, dp(24))
+            }
+        )
+        body.addView(
+            actionButton(getString(R.string.google_findhub_connect)).apply {
+                id = FIND_HUB_ID
+                setOnClickListener {
+                    if (!busy) {
+                        busy = true
+                        pendingWeb = true
+                        loading()
+                        launchConsent()
+                    }
+                }
+            },
+            LinearLayout.LayoutParams(-1, dp(52)),
+        )
+        body.addView(
+            actionButton(getString(R.string.google_switch_account), false).apply {
+                id = CONNECT_ID
+                setOnClickListener { chooseAccount() }
+            },
+            LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) },
         )
     }
 
@@ -214,8 +253,7 @@ class GoogleAuthActivity : Activity() {
                             if (isFinishing || isDestroyed || requestGeneration != generation)
                                 return@acceptIdentity
                             if (stored) {
-                                pendingWeb = true
-                                launchConsent()
+                                showFindHubConnection()
                             } else showMessage(R.string.google_gms_failed)
                         }
                     }
@@ -316,6 +354,7 @@ class GoogleAuthActivity : Activity() {
         const val SNAPSHOT = "googleDevices"
         const val STATUS_ID = 1310
         const val CONNECT_ID = 1311
+        const val FIND_HUB_ID = 1312
         const val EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email"
         private const val PICK_ACCOUNT = 31
         private const val AUTHORIZE = 32

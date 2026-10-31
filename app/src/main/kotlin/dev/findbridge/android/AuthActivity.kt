@@ -26,6 +26,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import dev.findbridge.android.Ui.actionButton
@@ -60,7 +61,15 @@ class AuthActivity : Activity() {
     private var readyEpoch = 0
     private var imeWasVisible = false
     private var mainLoadFailed = false
+    private var recoveryNeeded = false
     private var sessionRejected = false
+    private var sessionObservationAvailable = false
+    private var automaticInputAllowed = false
+    private var resumed = false
+    private val automaticScripts = mutableListOf<ScriptHandler>()
+    private val loadingDeadline = AuthLoadingDeadline {
+        authenticationFailed(R.string.connection_failed, R.string.apple_login_stalled)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Ui.configure(this)
@@ -112,9 +121,7 @@ class AuthActivity : Activity() {
                 gravity = Gravity.CENTER
                 contentDescription = getString(R.string.reload_auth)
                 setOnClickListener {
-                    errorView.visibility = View.GONE
-                    submittedStages.clear()
-                    webView.reload()
+                    if (restartAuthentication()) webView.reload()
                 }
             },
             LinearLayout.LayoutParams(dp(48), dp(48)),
@@ -150,6 +157,7 @@ class AuthActivity : Activity() {
         frame.addView(automaticStatus, FrameLayout.LayoutParams(-1, -1))
         errorView =
             column().apply {
+                id = AUTH_ERROR_ID
                 gravity = Gravity.CENTER
                 setPadding(dp(28), dp(24), dp(28), dp(24))
                 setBackgroundColor(Ui.background)
@@ -157,9 +165,9 @@ class AuthActivity : Activity() {
                 addView(label(getString(R.string.check_connection_time), 14, Ui.muted))
                 addView(
                     actionButton(getString(R.string.connect_again)).apply {
+                        minimumHeight = dp(52)
                         setOnClickListener {
-                            errorView.visibility = View.GONE
-                            submittedStages.clear()
+                            if (!restartAuthentication()) return@setOnClickListener
                             if (sessionRejected) {
                                 sessionRejected = false
                                 // Explicit recovery discards only transient sessions. Persistent
@@ -172,17 +180,27 @@ class AuthActivity : Activity() {
                             } else webView.loadUrl(UrlPolicy.findUrl)
                         }
                     },
-                    LinearLayout.LayoutParams(-1, dp(52)),
+                    LinearLayout.LayoutParams(-1, -2),
+                )
+                addView(
+                    actionButton(getString(R.string.apple_show_sign_in), false).apply {
+                        minimumHeight = dp(52)
+                        id = SHOW_SIGN_IN_ID
+                        setOnClickListener { revealOfficialPage() }
+                    },
+                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) },
                 )
                 visibility = View.GONE
             }
         frame.addView(errorView, FrameLayout.LayoutParams(-1, -1))
+        if (intent.getBooleanExtra(USE_LOGIN, false)) loadingDeadline.start()
         configureWebView()
         val surface = FrameLayout(this).apply { setBackgroundColor(Ui.surface) }
         surface.addView(root, FrameLayout.LayoutParams(-1, -1))
         layoutPane = { PostureObserver.placeInPane(surface, root, fold) }
         surface.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> layoutPane() }
         setContentView(surface)
+        if (!sessionObservationAvailable) return
         if (intent.getBooleanExtra(USE_LOGIN, false)) {
             loginWorker.execute {
                 val login = LoginVault.takeStaged() ?: vault.load()
@@ -191,8 +209,7 @@ class AuthActivity : Activity() {
                     if (login != null) installAutomaticLogin(login)
                     else {
                         vault.pause()
-                        automaticStatus.visibility = View.GONE
-                        origin.visibility = View.VISIBLE
+                        revealOfficialPage()
                     }
                     webView.loadUrl(UrlPolicy.findUrl)
                 }
@@ -236,8 +253,10 @@ class AuthActivity : Activity() {
                 ) {
                     authGeneration++
                     pendingStages.clear()
-                    mainLoadFailed = false
-                    errorView.visibility = View.GONE
+                    if (!recoveryNeeded) {
+                        mainLoadFailed = false
+                        errorView.visibility = View.GONE
+                    }
                 }
 
                 override fun shouldOverrideUrlLoading(
@@ -276,10 +295,37 @@ class AuthActivity : Activity() {
                     request: WebResourceRequest,
                     error: WebResourceError,
                 ) {
-                    if (request.isForMainFrame) {
-                        mainLoadFailed = true
-                        errorView.visibility = View.VISIBLE
-                    }
+                    val address = request.url.toString()
+                    val currentMain =
+                        request.isForMainFrame &&
+                            address.substringBefore('#') == view.url.orEmpty().substringBefore('#')
+                    // WebView also reports images and stylesheets; those must not abort sign-in.
+                    val authentication =
+                        UrlPolicy.isCredentialOrigin(address) &&
+                            (request.url.path
+                                .orEmpty()
+                                .matches(Regex("/(?:appleauth/auth|auth|signin)(?:/.*)?")) ||
+                                request.requestHeaders.any { (name, value) ->
+                                    name.equals("Sec-Fetch-Dest", true) &&
+                                        value in setOf("document", "iframe")
+                                })
+                    if (currentMain || authentication)
+                        authenticationFailed(
+                            R.string.connection_failed,
+                            R.string.check_connection_time,
+                        )
+                }
+
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    response: WebResourceResponse,
+                ) {
+                    if (request.isForMainFrame)
+                        authenticationFailed(
+                            R.string.connection_failed,
+                            R.string.check_connection_time,
+                        )
                 }
 
                 override fun onReceivedSslError(
@@ -289,8 +335,10 @@ class AuthActivity : Activity() {
                 ) {
                     handler.cancel()
                     if (error.url == view.url) {
-                        mainLoadFailed = true
-                        errorView.visibility = View.VISIBLE
+                        authenticationFailed(
+                            R.string.connection_failed,
+                            R.string.check_connection_time,
+                        )
                     }
                 }
 
@@ -310,62 +358,101 @@ class AuthActivity : Activity() {
             }
     }
 
-    @SuppressLint("RequiresFeature")
     private fun installSessionObserver() {
-        if (
-            !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) ||
-                !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-        ) {
-            Toast.makeText(this, getString(R.string.update_webview), Toast.LENGTH_LONG).show()
-            return
+        val installed =
+            AppleSessionObserver.install(
+                webView,
+                assets.open("apple-session.js").bufferedReader().use { it.readText() },
+                response = { data ->
+                    if (
+                        !captured &&
+                            !isFinishing &&
+                            !isDestroyed &&
+                            AppleRepository.get(this)
+                                .acceptAuthenticatedResponse(data, webView.settings.userAgentString)
+                    ) {
+                        captured = true
+                        loadingDeadline.stop()
+                        vault.markAuthenticated()
+                        CookieManager.getInstance().flush()
+                        setResult(RESULT_OK)
+                        finish()
+                    }
+                },
+                state = { state ->
+                    if (!captured && !isFinishing && !isDestroyed) {
+                        sessionRejected = state == "authenticationRequired"
+                        authenticationFailed(
+                            if (sessionRejected) R.string.sign_in_required
+                            else R.string.connection_failed,
+                            if (sessionRejected) R.string.apple_session_restore_failed
+                            else R.string.check_connection_time,
+                        )
+                    }
+                },
+            )
+        sessionObservationAvailable = installed
+        if (!installed) authenticationFailed(R.string.connection_failed, R.string.update_webview)
+    }
+
+    private fun restartAuthentication(): Boolean {
+        if (!sessionObservationAvailable) {
+            authenticationFailed(R.string.connection_failed, R.string.update_webview)
+            return false
         }
-        val origins = setOf("https://www.icloud.com", "https://www.icloud.com.cn")
-        WebViewCompat.addWebMessageListener(webView, "FindBridgeSessionState", origins) {
-            _,
-            message,
-            sourceOrigin,
-            mainFrame,
-            _ ->
-            if (
-                mainFrame &&
-                    sourceOrigin.toString().trimEnd('/') in origins &&
-                    message.data == "authenticationRequired" &&
-                    !captured
-            ) {
-                sessionRejected = true
-                (errorView.getChildAt(0) as TextView).setText(R.string.sign_in_required)
-                (errorView.getChildAt(1) as TextView).setText(R.string.apple_session_restore_failed)
-                errorView.visibility = View.VISIBLE
-            }
+        recoveryNeeded = false
+        errorView.visibility = View.GONE
+        mainLoadFailed = false
+        authGeneration++
+        submittedStages.clear()
+        pendingStages.clear()
+        dispatchedRequests.clear()
+        if (automaticInputAllowed) {
+            automaticStatus.visibility = View.VISIBLE
+            origin.visibility = View.GONE
+            loadingDeadline.start()
         }
-        WebViewCompat.addWebMessageListener(webView, "FindBridgeData", origins) {
-            _,
-            message,
-            sourceOrigin,
-            mainFrame,
-            _ ->
-            val data = message.data
-            if (
-                !captured &&
-                    mainFrame &&
-                    sourceOrigin.toString().trimEnd('/') in origins &&
-                    data != null &&
-                    AppleRepository.get(this)
-                        .acceptAuthenticatedResponse(data, webView.settings.userAgentString)
-            ) {
-                captured = true
-                vault.markAuthenticated()
-                CookieManager.getInstance().flush()
-                setResult(RESULT_OK)
-                finish()
-            }
-        }
-        val script = assets.open("apple-session.js").bufferedReader().use { it.readText() }
-        WebViewCompat.addDocumentStartJavaScript(webView, script, origins)
+        return true
+    }
+
+    private fun authenticationFailed(title: Int, detail: Int) {
+        if (captured || isFinishing || isDestroyed) return
+        recoveryNeeded = true
+        mainLoadFailed = true
+        loadingDeadline.stop()
+        authGeneration++
+        pendingStages.clear()
+        // Stop this document's queued input. An explicit retry gets a fresh document;
+        // neither a stalled page nor a late callback may submit credentials behind an error.
+        webView.evaluateJavascript("window.FindBridgeLoginRelay?.cancel()", null)
+        automaticStatus.visibility = View.GONE
+        progress.visibility = View.INVISIBLE
+        (errorView.getChildAt(0) as TextView).setText(title)
+        (errorView.getChildAt(1) as TextView).setText(detail)
+        errorView.visibility = View.VISIBLE
+    }
+
+    private fun revealOfficialPage() {
+        if (!sessionObservationAvailable) return
+        recoveryNeeded = false
+        mainLoadFailed = false
+        loadingDeadline.stop()
+        automaticInputAllowed = false
+        automaticScripts.forEach { it.remove() }
+        automaticScripts.clear()
+        authGeneration++
+        pendingStages.clear()
+        webView.evaluateJavascript("window.FindBridgeLoginRelay?.cancel()", null)
+        errorView.visibility = View.GONE
+        automaticStatus.visibility = View.GONE
+        origin.visibility = View.VISIBLE
+        webView.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
     }
 
     @SuppressLint("RequiresFeature")
     private fun installAutomaticLogin(login: SavedLogin) {
+        automaticInputAllowed = true
+        loadingDeadline.start()
         automaticStatus.visibility = View.VISIBLE
         origin.visibility = View.GONE
         // The native form already supplies the credentials. Avoid a second autofill picker
@@ -392,18 +479,11 @@ class AuthActivity : Activity() {
                 "rejected",
                 "timeout" -> {
                     vault.pause()
-                    (errorView.getChildAt(0) as TextView).setText(R.string.sign_in_required)
-                    (errorView.getChildAt(1) as TextView).setText(R.string.auto_paused)
-                    errorView.visibility = View.VISIBLE
+                    authenticationFailed(R.string.sign_in_required, R.string.auto_paused)
                     Toast.makeText(this, R.string.auto_paused, Toast.LENGTH_LONG).show()
                 }
                 "verification" -> {
-                    errorView.visibility = View.GONE
-                    automaticStatus.visibility = View.GONE
-                    origin.visibility = View.VISIBLE
-                    webView.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
-                    authGeneration++
-                    pendingStages.clear()
+                    revealOfficialPage()
                     Toast.makeText(this, R.string.verification_help, Toast.LENGTH_LONG).show()
                 }
             }
@@ -416,13 +496,13 @@ class AuthActivity : Activity() {
                 .bufferedReader()
                 .use { it.readText() }
                 .replace("__FINDBRIDGE_LOGIN__", payload)
-        WebViewCompat.addDocumentStartJavaScript(webView, script, origins)
+        automaticScripts += WebViewCompat.addDocumentStartJavaScript(webView, script, origins)
         WebViewCompat.addWebMessageListener(
             webView,
             "FindBridgeLoginTap",
             origins + UrlPolicy.loginContainerOrigins,
         ) { _, message, sourceOrigin, isMainFrame, replyProxy ->
-            if (!isMainFrame || captured) return@addWebMessageListener
+            if (!isMainFrame || captured || !automaticInputAllowed) return@addWebMessageListener
             if (sourceOrigin.toString().trimEnd('/') !in origins + UrlPolicy.loginContainerOrigins)
                 return@addWebMessageListener
             val payload = message.data?.takeIf { it.length < 1024 } ?: return@addWebMessageListener
@@ -457,17 +537,19 @@ class AuthActivity : Activity() {
             submitWhenReady(stage, requestId, ::reply)
         }
         val relay = assets.open("apple-login-relay.js").bufferedReader().use { it.readText() }
-        WebViewCompat.addDocumentStartJavaScript(
-            webView,
-            relay,
-            origins + UrlPolicy.loginContainerOrigins,
-        )
+        automaticScripts +=
+            WebViewCompat.addDocumentStartJavaScript(
+                webView,
+                relay,
+                origins + UrlPolicy.loginContainerOrigins,
+            )
         val landing = assets.open("apple-login-landing.js").bufferedReader().use { it.readText() }
-        WebViewCompat.addDocumentStartJavaScript(
-            webView,
-            landing,
-            UrlPolicy.loginContainerOrigins,
-        )
+        automaticScripts +=
+            WebViewCompat.addDocumentStartJavaScript(
+                webView,
+                landing,
+                UrlPolicy.loginContainerOrigins,
+            )
     }
 
     /** Activates the focused button with trusted native input after focus and layout are ready. */
@@ -590,11 +672,14 @@ class AuthActivity : Activity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (!::webView.isInitialized) return
+        loadingDeadline.setActive(resumed && hasFocus)
         if (hasFocus) webView.postOnAnimation { notifyLoginReady() }
         else webView.evaluateJavascript("window.FindBridgeLoginRelay?.suspend()", null)
     }
 
     override fun onPause() {
+        resumed = false
+        loadingDeadline.setActive(false)
         webView.onPause()
         CookieManager.getInstance().flush()
         super.onPause()
@@ -618,11 +703,16 @@ class AuthActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
+        loadingDeadline.setActive(hasWindowFocus())
         webView.onResume()
     }
 
     override fun onDestroy() {
         if (isFinishing && !captured && intent.getBooleanExtra(USE_LOGIN, false)) vault.pause()
+        loadingDeadline.stop()
+        automaticScripts.forEach { it.remove() }
+        automaticScripts.clear()
         loginWorker.shutdown()
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.stopLoading()
@@ -634,5 +724,7 @@ class AuthActivity : Activity() {
     companion object {
         const val USE_LOGIN = "useLocalLogin"
         const val AUTO_STATUS_ID = 1201
+        const val AUTH_ERROR_ID = 1202
+        const val SHOW_SIGN_IN_ID = 1203
     }
 }

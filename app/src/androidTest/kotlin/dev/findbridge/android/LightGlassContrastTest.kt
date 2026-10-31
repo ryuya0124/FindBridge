@@ -57,7 +57,7 @@ class LightGlassContrastTest {
     }
 
     @Test
-    fun smallSecondaryTextRemainsReadableAtMaximumTransparency() {
+    fun smallSecondaryTextRemainsReadableOverDarkImagery() {
         verify(Appearance.LIGHT, Color.rgb(2, 10, 20))
     }
 

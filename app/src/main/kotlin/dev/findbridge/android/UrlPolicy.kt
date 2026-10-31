@@ -8,6 +8,11 @@ internal object UrlPolicy {
     val credentialOrigins = setOf("https://idmsa.apple.com", "https://account.apple.com")
     val loginContainerOrigins = setOf("https://www.icloud.com", "https://www.icloud.com.cn")
 
+    fun isSessionContainer(address: String): Boolean = runCatching {
+        isApplePage(address) && URI(address).host in setOf("www.icloud.com", "www.icloud.com.cn")
+    }
+        .getOrDefault(false)
+
     fun isCredentialOrigin(address: String): Boolean = runCatching {
         val uri = URI(address)
         uri.scheme == "https" &&

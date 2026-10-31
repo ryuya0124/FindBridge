@@ -14,10 +14,14 @@ internal class DisplaySettings(
     private val activity: Activity,
     private val settings: AppearanceSettings,
     private val scene: GlassScene,
+    private val choiceBounds: () -> android.graphics.Rect,
     private val onMapChanged: () -> Unit,
     private val present: (LinearLayout) -> Unit,
-    private val close: () -> Unit,
 ) {
+    private val choices = DisplayChoices(activity, scene, choiceBounds)
+
+    fun dismissChoices() = choices.dismiss()
+
     private fun page(title: Int) =
         activity.column().apply {
             setPadding(activity.dp(18), 0, activity.dp(18), activity.dp(12))
@@ -42,15 +46,28 @@ internal class DisplaySettings(
                 onMapChanged()
             }
         )
+        activity.space(content, 8)
+        content.addView(
+            activity
+                .label(
+                    activity.getString(R.string.map_preview_sources),
+                    10,
+                    Ui.muted,
+                )
+                .apply {
+                    setPadding(activity.dp(5), 0, activity.dp(5), 0)
+                }
+        )
         activity.space(content, 18)
         content.addView(
             SettingsRow(
-                activity,
-                activity.getString(R.string.appearance),
-                activity.getString(settings.appearance.titleRes),
-            ) {
-                showAppearance()
-            }
+                    activity,
+                    activity.getString(R.string.appearance),
+                    activity.getString(settings.appearance.titleRes),
+                ) { anchor ->
+                    showAppearance(anchor)
+                }
+                .apply { id = R.id.display_appearance }
         )
         section(content, R.string.glass_intensity)
         content.addView(
@@ -81,7 +98,7 @@ internal class DisplaySettings(
             LinearLayout.LayoutParams(-1, activity.dp(44)),
         )
         content.addView(
-            activity.label(activity.getString(R.string.imagery_help), 11, Ui.muted).apply {
+            activity.label(activity.getString(R.string.blur_help), 11, Ui.muted).apply {
                 setPadding(activity.dp(5), 0, activity.dp(5), 0)
             }
         )
@@ -106,47 +123,39 @@ internal class DisplaySettings(
                     activity,
                     activity.getString(R.string.language),
                     AppLanguage.label(activity),
-                ) {
-                    showLanguage()
+                ) { anchor ->
+                    showLanguage(anchor)
                 }
                 .apply { id = R.id.display_language }
         )
         present(content)
     }
 
-    private fun showAppearance() {
-        val content = page(R.string.appearance)
-        Appearance.entries.forEach { choice ->
-            content.addView(
-                SettingsRow(
-                    activity,
-                    activity.getString(choice.titleRes),
-                    checked = settings.appearance == choice,
-                ) {
-                    settings.appearance = choice
-                    activity.recreate()
-                }
-            )
-            activity.space(content, 6)
+    private fun showAppearance(anchor: android.view.View) {
+        choices.show(
+            anchor,
+            Appearance.entries.map {
+                activity.getString(it.titleRes) to (settings.appearance == it)
+            },
+        ) { index ->
+            val choice = Appearance.entries[index]
+            if (settings.appearance != choice) {
+                settings.appearance = choice
+                activity.recreate()
+            }
         }
-        present(content)
     }
 
-    private fun showLanguage() {
-        val content = page(R.string.language)
-        AppLanguage.choices.forEach { (tag, name) ->
-            content.addView(
-                SettingsRow(
-                    activity,
-                    if (tag.isEmpty()) activity.getString(R.string.system) else name,
-                    checked = tag == AppLanguage.selected(activity),
-                ) {
-                    close()
-                    AppLanguage.select(activity, tag)
-                }
-            )
-            activity.space(content, 6)
+    private fun showLanguage(anchor: android.view.View) {
+        choices.show(
+            anchor,
+            AppLanguage.choices.map { (tag, name) ->
+                (if (tag.isEmpty()) activity.getString(R.string.system) else name) to
+                    (tag == AppLanguage.selected(activity))
+            },
+        ) { index ->
+            val tag = AppLanguage.choices[index].first
+            if (tag != AppLanguage.selected(activity)) AppLanguage.select(activity, tag)
         }
-        present(content)
     }
 }

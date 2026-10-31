@@ -83,6 +83,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private lateinit var mapButton: MapControlButton
     private lateinit var recenterButton: MapControlButton
     private var panel: GlassPanel? = null
+    private var displaySettings: DisplaySettings? = null
+    private var displaySettingsOpen = false
     private lateinit var attribution: TextView
     private lateinit var statusPill: TextView
     private val markers = mutableMapOf<Marker, String>()
@@ -300,6 +302,28 @@ class MainActivity : Activity(), AppleRepository.Listener {
         google.addListener(this)
         locationSync.addListener(this)
         renderSheet()
+        if (savedInstanceState?.getBoolean("displaySettingsOpen") == true) {
+            root.addOnLayoutChangeListener(
+                object : View.OnLayoutChangeListener {
+                    override fun onLayoutChange(
+                        v: View,
+                        l: Int,
+                        t: Int,
+                        r: Int,
+                        b: Int,
+                        ol: Int,
+                        ot: Int,
+                        or: Int,
+                        ob: Int,
+                    ) {
+                        if (r > l && b > t) {
+                            root.removeOnLayoutChangeListener(this)
+                            root.post { if (!isFinishing && !isDestroyed) showMapSettings() }
+                        }
+                    }
+                }
+            )
+        }
         if (savedInstanceState == null)
             root.post {
                 NativeMotion.enter(sheet, dp(30).toFloat())
@@ -428,15 +452,30 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun showMapSettings() {
-        DisplaySettings(
-                this,
-                appearance,
-                glass,
-                onMapChanged = ::applyMapStyle,
-                present = { presentPanel(it, mapButton) },
-                close = { panel?.dismiss(immediate = true) },
-            )
-            .show()
+        displaySettings?.dismissChoices()
+        displaySettings =
+            DisplaySettings(
+                    this,
+                    appearance,
+                    glass,
+                    choiceBounds = {
+                        val bounds = currentLayout().popupBounds
+                        val origin = IntArray(2)
+                        root.getLocationOnScreen(origin)
+                        android.graphics.Rect(
+                            bounds.left + origin[0],
+                            bounds.top + origin[1],
+                            bounds.right + origin[0],
+                            bounds.bottom + origin[1],
+                        )
+                    },
+                    onMapChanged = ::applyMapStyle,
+                    present = {
+                        presentPanel(it, mapButton)
+                        displaySettingsOpen = true
+                    },
+                )
+                .also { it.show() }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -722,11 +761,14 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun presentPanel(content: LinearLayout, anchor: View? = null) {
+        displaySettings?.dismissChoices()
+        displaySettingsOpen = false
         panel?.dismiss(immediate = true)
         mapButton.active = anchor === mapButton
         panel =
             GlassPanel(this, root, glass, content, anchor, currentLayout().popupBounds) {
                 panel = null
+                displaySettingsOpen = false
                 mapButton.active = false
             }
     }
@@ -998,10 +1040,17 @@ class MainActivity : Activity(), AppleRepository.Listener {
         )
         space(content, 12)
         content.addView(
-            actionButton(getString(R.string.google_connect), false).apply {
-                id = GOOGLE_CONNECT_ID
-                setOnClickListener { connectGoogle() }
-            },
+            actionButton(
+                    getString(
+                        if (google.signedIn && !google.connected) R.string.google_findhub_connect
+                        else R.string.google_connect
+                    ),
+                    false,
+                )
+                .apply {
+                    id = GOOGLE_CONNECT_ID
+                    setOnClickListener { connectGoogle() }
+                },
             LinearLayout.LayoutParams(-1, dp(50)),
         )
         scroll.addView(content)
@@ -1427,6 +1476,15 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 },
                 LinearLayout.LayoutParams(-1, dp(48)),
             )
+        space(content, 10)
+        content.addView(
+            actionButton(getString(R.string.login_details), false).apply {
+                minimumHeight = dp(48)
+                setOnClickListener { editLogin() }
+            },
+            LinearLayout.LayoutParams(-1, -2),
+        )
+        if (loginVault.paused) content.addView(label(getString(R.string.auto_paused), 12, Ui.muted))
         space(content, 24)
         content.addView(label("Google Find Hub", 18, Ui.ink, true))
         space(content, 8)
@@ -1445,10 +1503,17 @@ class MainActivity : Activity(), AppleRepository.Listener {
         )
         space(content, 12)
         content.addView(
-            actionButton(getString(R.string.google_connect), false).apply {
-                id = GOOGLE_CONNECT_ID
-                setOnClickListener { connectGoogle() }
-            },
+            actionButton(
+                    getString(
+                        if (google.signedIn && !google.connected) R.string.google_findhub_connect
+                        else R.string.google_connect
+                    ),
+                    false,
+                )
+                .apply {
+                    id = GOOGLE_CONNECT_ID
+                    setOnClickListener { connectGoogle() }
+                },
             LinearLayout.LayoutParams(-1, dp(50)),
         )
         if (google.connected || google.signedIn) {
@@ -1460,6 +1525,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 LinearLayout.LayoutParams(-1, dp(48)),
             )
         }
+        space(content, 24)
+        content.addView(label(getString(R.string.app_settings), 18, Ui.ink, true))
         space(content, 12)
         content.addView(
             actionButton(getString(R.string.appearance_map), false).apply {
@@ -1467,14 +1534,6 @@ class MainActivity : Activity(), AppleRepository.Listener {
             },
             LinearLayout.LayoutParams(-1, dp(48)),
         )
-        space(content, 10)
-        content.addView(
-            actionButton(getString(R.string.login_details), false).apply {
-                setOnClickListener { editLogin() }
-            },
-            LinearLayout.LayoutParams(-1, dp(48)),
-        )
-        if (loginVault.paused) content.addView(label(getString(R.string.auto_paused), 12, Ui.muted))
         space(content, 10)
         content.addView(
             actionButton(getString(R.string.location_sources), false).apply {
@@ -1973,6 +2032,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         repository.removeListener(this)
         google.removeListener(this)
         locationSync.removeListener(this)
+        displaySettings?.dismissChoices()
         panel?.dismiss(immediate = true)
         pageMotion.finish()
         NativeMotion.cancelTree(root)
@@ -1989,6 +2049,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         mapView.onSaveInstanceState(outState)
+        outState.putBoolean("displaySettingsOpen", displaySettingsOpen)
         outState.putString("selected", selectedId)
         outState.putInt("tab", activeTab)
         outState.putInt("sheetHeight", sheetHeight)

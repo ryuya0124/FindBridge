@@ -14,7 +14,7 @@ import android.widget.RadioButton
 import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
 
-/** Small local illustrations distinguish map styles without fetching extra map tiles. */
+/** Real map samples distinguish map styles without rendering extra live maps in the menu. */
 @android.annotation.SuppressLint("ViewConstructor")
 internal class MapModePicker(activity: Activity, selected: MapMode, onSelect: (MapMode) -> Unit) :
     LinearLayout(activity) {
@@ -90,6 +90,18 @@ internal class MapModePicker(activity: Activity, selected: MapMode, onSelect: (M
         View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val path = Path()
+        private val image =
+            requireNotNull(
+                context.getDrawable(
+                    when (mode) {
+                        MapMode.STANDARD ->
+                            if (Ui.dark) R.drawable.map_preview_standard_dark
+                            else R.drawable.map_preview_standard
+                        MapMode.AERIAL -> R.drawable.map_preview_aerial
+                        MapMode.HYBRID -> R.drawable.map_preview_hybrid
+                    }
+                )
+            )
         var chosen = false
             set(value) {
                 field = value
@@ -99,48 +111,11 @@ internal class MapModePicker(activity: Activity, selected: MapMode, onSelect: (M
         override fun onDraw(canvas: Canvas) {
             canvas.save()
             canvas.scale(width / 100f, height / 64f)
-            val aerial = mode != MapMode.STANDARD
-            paint.color =
-                if (aerial) 0xff647964.toInt()
-                else if (Ui.dark) 0xff364039.toInt() else 0xffdce5d7.toInt()
-            canvas.drawRoundRect(0f, 0f, 100f, 64f, 12f, 12f, paint)
             path.reset()
             path.addRoundRect(0f, 0f, 100f, 64f, 12f, 12f, Path.Direction.CW)
             canvas.clipPath(path)
-            for (row in 0..2) for (column in 0..3) {
-                paint.color =
-                    if (aerial) {
-                        if ((row + column) % 2 == 0) 0xffa6aa9b.toInt() else 0xff7e8776.toInt()
-                    } else if (Ui.dark) 0xff4c514b.toInt() else 0xfff0e9dd.toInt()
-                canvas.drawRect(
-                    column * 27f + 3,
-                    row * 23f + 3,
-                    column * 27f + 22,
-                    row * 23f + 19,
-                    paint,
-                )
-            }
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 11f
-            paint.color =
-                if (aerial) 0xff497a8c.toInt()
-                else if (Ui.dark) 0xff355d70.toInt() else 0xff9dc9e0.toInt()
-            path.reset()
-            path.moveTo(75f, -8f)
-            path.cubicTo(78f, 16f, 39f, 43f, 49f, 74f)
-            canvas.drawPath(path, paint)
-            paint.strokeWidth = if (aerial) 2f else 4f
-            paint.color =
-                if (aerial) 0xffd2d0bc.toInt() else if (Ui.dark) 0xff818580.toInt() else Color.WHITE
-            canvas.drawLine(0f, 21f, 100f, 43f, paint)
-            canvas.drawLine(29f, 0f, 17f, 64f, paint)
-            if (mode == MapMode.HYBRID) {
-                paint.strokeWidth = 2.5f
-                paint.color = Color.WHITE
-                canvas.drawLine(9f, 13f, 25f, 13f, paint)
-                canvas.drawLine(67f, 48f, 86f, 48f, paint)
-            }
-            paint.style = Paint.Style.FILL
+            image.setBounds(0, 0, 100, 64)
+            image.draw(canvas)
             if (chosen) {
                 paint.color = Ui.positiveText
                 canvas.drawCircle(84f, 14f, 8f, paint)

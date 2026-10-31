@@ -1,16 +1,19 @@
 // Observes read-only Find Devices responses in Apple's own origin.
 // Account identifiers, passwords and verification codes are never inspected.
 (() => {
-  if (window.top !== window) return;
+  // Find Devices can run in a trusted iCloud iframe. Each document observes
+  // its own requests; native code validates both its origin and the top page.
   if (window.__findBridgeInstalled) return;
   window.__findBridgeInstalled = true;
   const readEndpoint = (value) => {
     try {
       const url = new URL(value, location.href);
       return (
-        url.protocol === 'https:' &&
+        url.protocol === "https:" &&
         /^p\d+-fmipweb\.icloud\.com(?:\.cn)?$/.test(url.hostname) &&
-        /^\/fmipservice\/client\/web\/(initClient|refreshClient)$/.test(url.pathname)
+        /^\/fmipservice\/client\/web\/(initClient|refreshClient)$/.test(
+          url.pathname,
+        )
       );
     } catch {
       return false;
@@ -18,7 +21,8 @@
   };
   const report = (url, body, response) => {
     try {
-      const parsed = typeof response === 'string' ? JSON.parse(response) : response;
+      const parsed =
+        typeof response === "string" ? JSON.parse(response) : response;
       if (
         readEndpoint(url) &&
         [401, 421, 450].includes(Number(parsed?.statusCode))
@@ -26,40 +30,66 @@
         failed(url, Number(parsed.statusCode));
         return;
       }
-      if (!readEndpoint(url) || !Array.isArray(parsed?.content)) return;
+      if (!readEndpoint(url)) return;
+      if (!Array.isArray(parsed?.content)) {
+        failed(url, 0);
+        return;
+      }
       FindBridgeData.postMessage(
         JSON.stringify({
           url,
-          body: typeof body === 'string' ? body : '{}',
+          body: typeof body === "string" ? body : "{}",
           response: parsed,
         }),
       );
     } catch {
-      // Ignore unrelated or incomplete responses.
+      failed(url, 0);
     }
   };
   const failed = (url, status) => {
-    if (readEndpoint(url) && [401, 421, 450].includes(status)) {
+    if (readEndpoint(url) && (status === 0 || status >= 400)) {
       try {
-        FindBridgeSessionState.postMessage('authenticationRequired');
+        FindBridgeSessionState.postMessage(
+          [401, 421, 450].includes(status)
+            ? "authenticationRequired"
+            : "serviceUnavailable",
+        );
       } catch (_) {
         // Only the native Apple-origin observer receives this event.
       }
     }
   };
   const originalFetch = window.fetch;
-  window.fetch = async function (input, options) {
-    const url =
-      typeof input === 'string' ? new URL(input, location.href).href : input.url;
-    const body =
-      options?.body ??
-      (input instanceof Request ? await input.clone().text() : '{}');
-    const response = await originalFetch.apply(this, arguments);
-    failed(url, response.status);
-    if (readEndpoint(url) && response.ok) {
-      response.clone().text().then((text) => report(url, body, text));
+  window.fetch = function (input, options) {
+    let url, body;
+    try {
+      // fetch accepts strings, URL objects and Request objects. Inspecting
+      // one must never delay or replace the promise returned to Apple's app.
+      url = new URL(
+        input instanceof Request ? input.url : String(input),
+        location.href,
+      ).href;
+      if (readEndpoint(url)) {
+        body =
+          options?.body ??
+          (input instanceof Request ? input.clone().text() : "{}");
+      }
+    } catch (_) {}
+    const pending = originalFetch.apply(this, arguments);
+    if (readEndpoint(url)) {
+      pending.then(
+        (response) => {
+          failed(url, response.status);
+          if (response.ok) {
+            Promise.all([body, response.clone().text()])
+              .then(([requestBody, text]) => report(url, requestBody, text))
+              .catch(() => failed(url, 0));
+          }
+        },
+        () => failed(url, 0),
+      );
     }
-    return response;
+    return pending;
   };
   const originalOpen = XMLHttpRequest.prototype.open;
   const originalSend = XMLHttpRequest.prototype.send;
@@ -69,15 +99,20 @@
   };
   XMLHttpRequest.prototype.send = function (body) {
     if (readEndpoint(this.__findBridgeUrl)) {
+      for (const event of ["error", "timeout"]) {
+        this.addEventListener(event, () => failed(this.__findBridgeUrl, 0), {
+          once: true,
+        });
+      }
       this.addEventListener(
-        'load',
+        "load",
         () => {
           failed(this.__findBridgeUrl, this.status);
           if (this.status === 200) {
             report(
               this.__findBridgeUrl,
               body,
-              this.responseType === 'json' ? this.response : this.responseText,
+              this.responseType === "json" ? this.response : this.responseText,
             );
           }
         },
