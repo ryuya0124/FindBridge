@@ -191,6 +191,6 @@
     <string name="google_findhub_connect">Connect to Find Hub</string>
     <string name="google_switch_account">Choose another Google account</string>
     <string name="app_settings">App settings</string>
-    <string name="blur_help">Adjust how much the map is blurred behind panels.</string>
+    <string name="blur_help">Adjust how the map looks through panels.</string>
     <string name="map_preview_sources">Map: © OpenStreetMap · OpenFreeMap · OpenMapTiles\nImagery: adapted from GSI Japan tiles.</string>
 </resources>

@@ -194,6 +194,6 @@
     <string name="google_findhub_connect">Conectar con Find Hub</string>
     <string name="google_switch_account">Elegir otra cuenta de Google</string>
     <string name="app_settings">Ajustes de la app</string>
-    <string name="blur_help">Ajusta el desenfoque del mapa detrás de los paneles.</string>
+    <string name="blur_help">Ajusta cómo se ve el mapa a través de los paneles.</string>
     <string name="map_preview_sources">Mapa: © OpenStreetMap · OpenFreeMap · OpenMapTiles\nImágenes: muestras adaptadas de teselas de GSI Japón.</string>
 </resources>

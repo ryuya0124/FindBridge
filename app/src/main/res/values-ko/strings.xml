@@ -188,6 +188,6 @@
     <string name="google_findhub_connect">Find Hub에 연결</string>
     <string name="google_switch_account">다른 Google 계정 선택</string>
     <string name="app_settings">앱 설정</string>
-    <string name="blur_help">패널 뒤에 있는 지도의 흐림 정도를 조절합니다.</string>
+    <string name="blur_help">패널을 통해 보이는 지도의 모양을 조절합니다.</string>
     <string name="map_preview_sources">지도: © OpenStreetMap · OpenFreeMap · OpenMapTiles\n사진: 일본 국토지리원(GSI) 타일을 가공한 예시</string>
 </resources>

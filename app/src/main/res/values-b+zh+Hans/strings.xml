@@ -188,6 +188,6 @@
     <string name="google_findhub_connect">连接 Find Hub</string>
     <string name="google_switch_account">选择其他 Google 账号</string>
     <string name="app_settings">应用设置</string>
-    <string name="blur_help">调整面板后方地图的模糊程度。</string>
+    <string name="blur_help">调整透过面板看到的地图外观。</string>
     <string name="map_preview_sources">地图：© OpenStreetMap · OpenFreeMap · OpenMapTiles\n照片：基于日本国土地理院（GSI）图块制作的示例</string>
 </resources>

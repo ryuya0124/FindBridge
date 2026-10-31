@@ -194,6 +194,6 @@
     <string name="google_findhub_connect">Se connecter à Find Hub</string>
     <string name="google_switch_account">Choisir un autre compte Google</string>
     <string name="app_settings">Réglages de l’application</string>
-    <string name="blur_help">Réglez le flou de la carte derrière les panneaux.</string>
+    <string name="blur_help">Réglez l’apparence de la carte à travers les panneaux.</string>
     <string name="map_preview_sources">Carte : © OpenStreetMap · OpenFreeMap · OpenMapTiles\nImages : tuiles GSI Japon adaptées aux aperçus.</string>
 </resources>
