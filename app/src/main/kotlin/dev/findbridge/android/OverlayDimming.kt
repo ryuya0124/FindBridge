@@ -6,7 +6,7 @@ import android.widget.PopupWindow
 /** Keep the front glass bright while dimming every window underneath it. */
 internal object OverlayDimming {
     val amount: Float
-        get() = if (Ui.dark) .32f else .24f
+        get() = if (Ui.dark) .45f else .40f
 
     fun apply(popup: PopupWindow) {
         // After showAsDropDown, this root belongs to the popup's own window.

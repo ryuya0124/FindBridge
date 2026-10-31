@@ -264,4 +264,4 @@ GoogleではGMSの本人情報確認後、ネイティブ画面の「Find Hubへ
 
 ## 重なったウィンドウの暗転
 
-`OverlayDimming` はライト24%・ダーク32%の暗転量を共通化します。`GlassPanel` は前面のガラスより下にあるscrimへ適用し、既存の180msの表示・150msの解除を維持します。`GlassPopup` は表示後の自身のウィンドウへ [FLAG_DIM_BEHINDとdimAmount](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_DIM_BEHIND) を設定し、親パネルを含む背後の画面を暗くします。ポップアップを破棄すると、その暗転もOSが解除します。ガラスの材質・ぼかし・画像の取得経路は変更しません。
+`OverlayDimming` はライト40%・ダーク45%（rc8以降）の暗転量を共通化します。`GlassPanel` は前面のガラスより下にあるscrimへ適用し、既存の180msの表示・150msの解除を維持します。`GlassPopup` は表示後の自身のウィンドウへ [FLAG_DIM_BEHINDとdimAmount](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_DIM_BEHIND) を設定し、親パネルを含む背後の画面を暗くします。ポップアップを破棄すると、その暗転もOSが解除します。ガラスの材質・ぼかし・画像の取得経路は変更しません。
