@@ -188,6 +188,6 @@
     <string name="google_findhub_connect">Find Hubへ接続</string>
     <string name="google_switch_account">別のGoogleアカウントを選択</string>
     <string name="app_settings">アプリの設定</string>
-    <string name="blur_help">パネルの背後にある地図のぼかし具合を調整します。</string>
+    <string name="blur_help">パネル越しの地図の見え方を調整します。</string>
     <string name="map_preview_sources">地図: © OpenStreetMap · OpenFreeMap · OpenMapTiles\n写真: 地理院タイル（国土地理院）を加工した見本</string>
 </resources>

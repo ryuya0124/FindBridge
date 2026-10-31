@@ -199,8 +199,7 @@ private class GlassShader33 {
         shader.setFloatUniform("corner", radius)
         shader.setFloatUniform("material", material)
         shader.setFloatUniform("dark", if (Ui.dark) 1f else 0f)
-        // Refraction stays stable; the user's blur control changes the cached map pixels.
-        shader.setFloatUniform("strength", .65f)
+        shader.setFloatUniform("strength", scene.intensity)
         shader.setFloatUniform("contact", contact)
         paint.shader = shader
         paint.alpha = alpha

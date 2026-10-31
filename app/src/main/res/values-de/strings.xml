@@ -191,6 +191,6 @@
     <string name="google_findhub_connect">Mit Find Hub verbinden</string>
     <string name="google_switch_account">Anderes Google-Konto wählen</string>
     <string name="app_settings">App-Einstellungen</string>
-    <string name="blur_help">Passe die Unschärfe der Karte hinter den Bedienfeldern an.</string>
+    <string name="blur_help">Passe an, wie die Karte durch die Bedienfelder hindurch aussieht.</string>
     <string name="map_preview_sources">Karte: © OpenStreetMap · OpenFreeMap · OpenMapTiles\nBilder: bearbeitete GSI-Japan-Kacheln.</string>
 </resources>

@@ -13,7 +13,6 @@ import android.view.TextureView
 import android.view.View
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
@@ -61,44 +60,7 @@ internal class GlassScene(private val mapView: View) {
     val height
         get() = mapView.height
 
-    @Volatile private var blurStrength = .65f
-    // Only the serial worker accesses the unblurred copy. Changing blur reuses it,
-    // avoiding another GPU readback or tile request while the slider moves.
-    private var rawBackdrop: Bitmap? = null
-    private var rawSample: CameraSample? = null
-    private var rawMap: MapLibreMap? = null
-    private val blurQueued = AtomicBoolean(false)
-    var intensity: Float
-        get() = blurStrength
-        set(value) {
-            val strength = value.coerceIn(0f, 1f)
-            if (strength == blurStrength || disposed) return
-            blurStrength = strength
-            if (blurQueued.compareAndSet(false, true))
-                worker.execute {
-                    blurQueued.set(false)
-                    val source = rawBackdrop ?: return@execute
-                    val sample = rawSample
-                    val map = rawMap
-                    val blurred = blur(source)
-                    handler.post {
-                        if (disposed) blurred.recycle()
-                        else {
-                            bitmap = blurred
-                            cameraSample = sample
-                            map?.let(::trackCamera)
-                            invalidate()
-                        }
-                    }
-                }
-        }
-
-    private fun blur(source: Bitmap): Bitmap {
-        val radius = (blurStrength * 10f * source.width / 640f).toInt()
-        return if (radius == 0) requireNotNull(source.copy(Bitmap.Config.ARGB_8888, false))
-        else GlassBlur.create(source, radius)
-    }
-
+    var intensity = .65f
     private val location = IntArray(2)
 
     fun origin(view: View): Pair<Float, Float> {
@@ -140,11 +102,9 @@ internal class GlassScene(private val mapView: View) {
                 return@copyBackdrop
             }
             worker.execute {
-                rawBackdrop?.recycle()
-                rawBackdrop = scaled
-                rawSample = sample
-                rawMap = map
-                val blurred = blur(scaled)
+                val radius = (6f * scaled.width / 640f).toInt().coerceAtLeast(1)
+                val blurred = GlassBlur.create(scaled, radius)
+                scaled.recycle()
                 handler.post publish@{
                     pending = false
                     if (disposed) {
@@ -262,15 +222,8 @@ internal class GlassScene(private val mapView: View) {
     }
 
     fun dispose() {
-        if (disposed) return
         disposed = true
         stopTracking()
-        worker.execute {
-            rawBackdrop?.recycle()
-            rawBackdrop = null
-            rawSample = null
-            rawMap = null
-        }
         worker.shutdown()
         observers.clear()
         bitmap = null
