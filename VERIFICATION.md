@@ -1,5 +1,16 @@
 # 検証記録
 
+## 2026-10-31 — UWBトークンの継続調査（製品APK変更なし）
+
+- `findmylocateagent` とmacOS 27.2のFindMyCrypto / NearbyInteractionから、32バイトSharedSecretKey→16バイトIRK→variant 1のFindingトークンという経路を追跡しました。固定識別子 `123456` はiOS 27.0.1 / 24A446側でも静的に確認しました。
+- MacのNIDiscoveryTokenのメモリ内の生成関数とgetterを公開ダミーIRK 3件で呼び、限定OPACKエンコーダーと全件一致。NISessionや実際のアカウントを使っていません。IRKの不正長5件は自作エンコーダーで拒否し、OSのassertionを起こす呼び出しはしていません。
+- infoを省略する所有者用とbucket番号をinfoにする経路を区別。Mac版の静的な既定値10,080分と、Foundation基準への丸め・番号+1・終了点nextDownを確認しました。静的コードに基づくモデル8件と各HKDFを照合。デーモン内のbucket関数や、実機iPhoneの運用周期を実行確認したものではありません。
+- `requestOwnerToken(force:)` はNITokenService_LocalMessagingと、接続端末へ送る処理に進むことを確認しました。OwnerSharedSecretsRecordのローカル保存と、CloudKitBackedに適合するFriendSharedSecretsRecordを分離し、所有者向けWeb APIと推定しません。
+- 静的参照の再現ツールを追加。正負のアドレス・B/BL・不正ULEB・コンパイラー生成Mach-OのPAGEZERO／文字列／import stubを5テストで確認しました。fixtureの実行ファイルは起動していません。
+- 従来の整数表現4件、HKDF、SipHash 64件、CCM既知入力、改ざん拒否32件も再確認しました。PythonコードはRuffで整形・検査、Objective-Cヘルパーはclang-formatで整形しています。
+- 共有するMach-Oパーサーの変更後もFMIPRangingParametersの型メタデータとハッシュが以前の結果と一致することを確認。公開するソース171ファイルをGitleaksで走査し、検出0でした。
+- 実アカウントの鍵、Keychain、アカウントDBの読み取り、IDS送信、CloudKit要求、BLE広告、UWB測距、サウンドは行っていません。Android製品コード・署名済みAPK・リリースノートは変更していません。取得経路と残る条件は[トークン調査](docs/UWB-TOKENS.md)へ記載しました。
+
 ## 3.3.0-rc2 — Apple接続の再利用・コード整理・UWB継続調査
 
 2026-10-31（JST）。Appleのサインイン通知メールが繰り返し届く件について、接続開始時に毎回CookieとWebStorageを削除していた経路を確認しました。

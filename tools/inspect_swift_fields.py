@@ -47,8 +47,7 @@ class MachO:
                     entry = cursor + 72 + index * 80
                     name = self.read(entry, 16).split(b"\0", 1)[0].decode("ascii")
                     section_address, section_size = self.unpack("QQ", entry + 32)
-                    if name == "__swift5_types":
-                        self.sections[name] = (section_address, section_size)
+                    self.sections[name] = (section_address, section_size)
             cursor += size
 
     def read(self, offset: int, size: int) -> bytes:
