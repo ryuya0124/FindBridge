@@ -7,6 +7,25 @@ import org.junit.Test
 
 class UrlPolicyTest {
     @Test
+    fun embeddedSessionMessagesRequireAnExactICloudTopPage() {
+        listOf("https://www.icloud.com/find", "https://www.icloud.com.cn/find").forEach {
+            assertTrue(UrlPolicy.isSessionContainer(it))
+        }
+        listOf(
+                "https://outside.invalid/",
+                "https://idmsa.apple.com/",
+                "https://www.icloud.com.evil.invalid/",
+                "http://www.icloud.com/find",
+                "https://user@www.icloud.com/find",
+                "https://www.icloud.com:8443/find",
+                "about:blank",
+            )
+            .forEach {
+                assertFalse(it, UrlPolicy.isSessionContainer(it))
+            }
+    }
+
+    @Test
     fun savedCredentialsAreRestrictedToExactAppleAuthenticationOrigins() {
         listOf(
                 "https://idmsa.apple.com/appleauth/auth/authorize/signin",

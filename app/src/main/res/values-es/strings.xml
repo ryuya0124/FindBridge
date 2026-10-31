@@ -9,8 +9,7 @@
     <string name="gsi_hybrid_source">GSI Japón · © OpenStreetMap</string>
     <string name="map_view">Vista del mapa</string>
     <string name="appearance">Apariencia</string>
-    <string name="glass_intensity">Transparencia del cristal</string>
-    <string name="imagery_help">Imágenes de GSI. La alta resolución se ofrece principalmente en Japón.</string>
+    <string name="glass_intensity">Desenfoque del fondo</string>
     <string name="reduce_motion">Reducir movimiento</string>
     <string name="motion_help">También respeta los ajustes de animación del dispositivo.</string>
     <string name="cancel">Cancelar</string>
@@ -58,7 +57,6 @@
     <string name="confirm_sign_out">¿Cerrar sesión?</string>
     <string name="sign_out_help">Elimina de esta app el acceso guardado, la sesión y las ubicaciones obtenidas.</string>
     <string name="install_map_app">Instala una app de mapas para ver la ruta</string>
-    <string name="updating">Actualizando…</string>
     <string name="connect_account">Conectar cuenta de Apple</string>
     <string name="reload_auth">Recargar autenticación</string>
     <string name="connection_failed">No se pudo conectar</string>
@@ -88,7 +86,7 @@
     <string name="source_import_failed">Elige un archivo de conexión o ubicación compatible.</string>
     <string name="source_read_failed">No se pudo leer la fuente. Revisa el archivo o la conexión.</string>
     <string name="source_data">Datos de origen</string>
-    <string name="login_details">Acceso e inicio automático</string>
+    <string name="login_details">Acceso e inicio automático de Apple</string>
     <string name="email">Correo electrónico</string>
     <string name="password">Contraseña</string>
     <string name="saved_password_hint">Guardada: escribe solo para cambiarla</string>
@@ -190,4 +188,12 @@
     <string name="google_lost_explanation">Se bloqueará el dispositivo y se mostrarán tus datos de contacto. Según su configuración, puede cerrar la sesión de Google, eliminar tarjetas de Wallet o pedir verificaciones adicionales de identidad.</string>
     <string name="google_sound_confirmation">¿Hacer sonar %1$s al máximo volumen durante hasta cinco minutos?</string>
     <string name="apple_session_restore_failed">No se pudo restaurar la sesión de Apple guardada. Vuelve a conectarte.</string>
+    <string name="apple_login_stalled">La conexión está tardando más de lo previsto. Inténtalo de nuevo o abre el inicio de sesión de Apple.</string>
+    <string name="apple_show_sign_in">Abrir el inicio de sesión de Apple</string>
+    <string name="google_identity_ready">Has iniciado sesión en Google. Conecta con Find Hub para ver tus dispositivos.</string>
+    <string name="google_findhub_connect">Conectar con Find Hub</string>
+    <string name="google_switch_account">Elegir otra cuenta de Google</string>
+    <string name="app_settings">Ajustes de la app</string>
+    <string name="blur_help">Ajusta el desenfoque del mapa detrás de los paneles.</string>
+    <string name="map_preview_sources">Mapa: © OpenStreetMap · OpenFreeMap · OpenMapTiles\nImágenes: muestras adaptadas de teselas de GSI Japón.</string>
 </resources>

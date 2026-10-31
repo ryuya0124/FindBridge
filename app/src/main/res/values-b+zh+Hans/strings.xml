@@ -9,8 +9,7 @@
     <string name="gsi_hybrid_source">日本国土地理院 · © OpenStreetMap</string>
     <string name="map_view">地图视图</string>
     <string name="appearance">外观</string>
-    <string name="glass_intensity">玻璃透明度</string>
-    <string name="imagery_help">使用日本国土地理院影像。高分辨率主要覆盖日本。</string>
+    <string name="glass_intensity">背景模糊</string>
     <string name="reduce_motion">减少动态效果</string>
     <string name="motion_help">同时遵循设备的动画设置。</string>
     <string name="cancel">取消</string>
@@ -58,7 +57,6 @@
     <string name="confirm_sign_out">是否退出登录？</string>
     <string name="sign_out_help">从此应用删除已保存的登录信息、会话和已获取的位置。</string>
     <string name="install_map_app">请安装地图应用以查看路线</string>
-    <string name="updating">正在更新…</string>
     <string name="connect_account">连接 Apple 账户</string>
     <string name="reload_auth">重新载入验证页面</string>
     <string name="connection_failed">无法连接</string>
@@ -88,7 +86,7 @@
     <string name="source_import_failed">请选择兼容的连接或位置文件。</string>
     <string name="source_read_failed">无法读取来源。请检查文件或连接设置。</string>
     <string name="source_data">来源数据</string>
-    <string name="login_details">登录信息与自动登录</string>
+    <string name="login_details">Apple 登录信息与自动登录</string>
     <string name="email">电子邮件地址</string>
     <string name="password">密码</string>
     <string name="saved_password_hint">已保存，仅在更改时输入</string>
@@ -184,4 +182,12 @@
     <string name="google_lost_explanation">锁定设备并显示你的联系信息。根据设备设置，设备可能会退出 Google 账号、移除 Google 钱包中的支付卡，或要求额外的身份验证。</string>
     <string name="google_sound_confirmation">要在 %1$s 上以最大音量响铃最多五分钟吗？</string>
     <string name="apple_session_restore_failed">无法恢复已保存的 Apple 会话。请重新连接。</string>
+    <string name="apple_login_stalled">连接时间较长。请重试或打开 Apple 登录页面。</string>
+    <string name="apple_show_sign_in">打开 Apple 登录页面</string>
+    <string name="google_identity_ready">已登录 Google。请连接 Find Hub 以查看设备。</string>
+    <string name="google_findhub_connect">连接 Find Hub</string>
+    <string name="google_switch_account">选择其他 Google 账号</string>
+    <string name="app_settings">应用设置</string>
+    <string name="blur_help">调整面板后方地图的模糊程度。</string>
+    <string name="map_preview_sources">地图：© OpenStreetMap · OpenFreeMap · OpenMapTiles\n照片：基于日本国土地理院（GSI）图块制作的示例</string>
 </resources>

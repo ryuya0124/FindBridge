@@ -9,8 +9,7 @@
     <string name="gsi_hybrid_source">GSI Japan · © OpenStreetMap</string>
     <string name="map_view">Map view</string>
     <string name="appearance">Appearance</string>
-    <string name="glass_intensity">Glass transparency</string>
-    <string name="imagery_help">GSI imagery. High resolution is mainly available in Japan.</string>
+    <string name="glass_intensity">Background blur</string>
     <string name="reduce_motion">Reduce motion</string>
     <string name="motion_help">Also follows your device animation settings.</string>
     <string name="cancel">Cancel</string>
@@ -58,7 +57,6 @@
     <string name="confirm_sign_out">Sign out?</string>
     <string name="sign_out_help">Remove saved login details, the session, and fetched locations from this app.</string>
     <string name="install_map_app">Install a map app to view directions</string>
-    <string name="updating">Updating…</string>
     <string name="connect_account">Connect Apple Account</string>
     <string name="reload_auth">Reload authentication page</string>
     <string name="connection_failed">Could not connect</string>
@@ -88,7 +86,7 @@
     <string name="source_import_failed">Choose a compatible connection or location file.</string>
     <string name="source_read_failed">Could not read the source. Check the file or connection settings.</string>
     <string name="source_data">Source data</string>
-    <string name="login_details">Login details and automatic sign-in</string>
+    <string name="login_details">Apple login details and automatic sign-in</string>
     <string name="email">Email address</string>
     <string name="password">Password</string>
     <string name="saved_password_hint">Saved — enter only to change</string>
@@ -187,4 +185,12 @@
     <string name="google_lost_explanation">This locks the device and displays your contact details. Depending on its settings, the device may sign out of Google, remove Wallet payment cards, or require additional identity verification.</string>
     <string name="google_sound_confirmation">Ring %1$s at full volume for up to five minutes?</string>
     <string name="apple_session_restore_failed">The saved Apple session could not be restored. Reconnect to continue.</string>
+    <string name="apple_login_stalled">The connection is taking longer than expected. Retry or open the Apple sign-in screen.</string>
+    <string name="apple_show_sign_in">Open Apple sign-in</string>
+    <string name="google_identity_ready">You are signed in to Google. Connect to Find Hub to see your devices.</string>
+    <string name="google_findhub_connect">Connect to Find Hub</string>
+    <string name="google_switch_account">Choose another Google account</string>
+    <string name="app_settings">App settings</string>
+    <string name="blur_help">Adjust how much the map is blurred behind panels.</string>
+    <string name="map_preview_sources">Map: © OpenStreetMap · OpenFreeMap · OpenMapTiles\nImagery: adapted from GSI Japan tiles.</string>
 </resources>

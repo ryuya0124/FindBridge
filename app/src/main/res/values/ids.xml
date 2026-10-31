@@ -6,4 +6,6 @@
     <item name="panel_done" type="id" />
     <item name="device_disclosure" type="id" />
     <item name="find_title" type="id" />
+    <item name="display_choices" type="id" />
+    <item name="display_appearance" type="id" />
 </resources>

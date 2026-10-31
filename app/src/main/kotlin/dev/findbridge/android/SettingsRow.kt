@@ -19,7 +19,7 @@ internal class SettingsRow(
     title: String,
     value: String? = null,
     private val checked: Boolean? = null,
-    onClick: () -> Unit,
+    onClick: (View) -> Unit,
 ) : LinearLayout(activity) {
     init {
         gravity = Gravity.CENTER_VERTICAL
@@ -51,7 +51,7 @@ internal class SettingsRow(
         for (index in 0 until childCount) {
             getChildAt(index).importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        setOnClickListener { onClick() }
+        setOnClickListener { onClick(it) }
         NativeMotion.press(this, .985f)
     }
 

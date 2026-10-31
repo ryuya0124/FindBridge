@@ -9,8 +9,7 @@
     <string name="gsi_hybrid_source">地理院タイル · © OpenStreetMap</string>
     <string name="map_view">地図の表示</string>
     <string name="appearance">外観</string>
-    <string name="glass_intensity">ガラスの透明感</string>
-    <string name="imagery_help">国土地理院の写真です。高解像度は主に日本国内です。</string>
+    <string name="glass_intensity">背景のぼかし</string>
     <string name="reduce_motion">動きを減らす</string>
     <string name="motion_help">端末のアニメーション設定にも従います。</string>
     <string name="cancel">キャンセル</string>
@@ -58,7 +57,6 @@
     <string name="confirm_sign_out">サインアウトしますか？</string>
     <string name="sign_out_help">保存したログイン情報、セッション、取得済みの位置情報をこのアプリから削除します。</string>
     <string name="install_map_app">地図アプリをインストールすると経路を表示できます</string>
-    <string name="updating">更新中…</string>
     <string name="connect_account">Apple Accountに接続</string>
     <string name="reload_auth">認証ページを再読み込み</string>
     <string name="connection_failed">接続できませんでした</string>
@@ -88,7 +86,7 @@
     <string name="source_import_failed">対応する接続ファイルまたは位置データを選択してください。</string>
     <string name="source_read_failed">連携元を読み取れませんでした。ファイルや接続設定を確認してください。</string>
     <string name="source_data">連携データ</string>
-    <string name="login_details">ログイン情報と自動ログイン</string>
+    <string name="login_details">Appleのログイン情報と自動ログイン</string>
     <string name="email">メールアドレス</string>
     <string name="password">パスワード</string>
     <string name="saved_password_hint">保存済み（変更時のみ入力）</string>
@@ -184,4 +182,12 @@
     <string name="google_lost_explanation">端末をロックし、連絡先とメッセージを表示します。端末の設定によってはGoogleアカウントからのサインアウト、ウォレットの支払いカードの削除、追加の本人確認が行われる場合があります。</string>
     <string name="google_sound_confirmation">%1$sで最大5分間、最大音量のサウンドを鳴らしますか？</string>
     <string name="apple_session_restore_failed">保存済みのAppleとの接続を復元できませんでした。再接続してください。</string>
+    <string name="apple_login_stalled">接続に時間がかかっています。再試行するか、Appleのサインイン画面を開いてください。</string>
+    <string name="apple_show_sign_in">Appleのサインイン画面を表示</string>
+    <string name="google_identity_ready">Googleへログイン済みです。デバイスを表示するにはFind Hubへ接続してください。</string>
+    <string name="google_findhub_connect">Find Hubへ接続</string>
+    <string name="google_switch_account">別のGoogleアカウントを選択</string>
+    <string name="app_settings">アプリの設定</string>
+    <string name="blur_help">パネルの背後にある地図のぼかし具合を調整します。</string>
+    <string name="map_preview_sources">地図: © OpenStreetMap · OpenFreeMap · OpenMapTiles\n写真: 地理院タイル（国土地理院）を加工した見本</string>
 </resources>

@@ -9,8 +9,7 @@
     <string name="gsi_hybrid_source">일본 국토지리원 · © OpenStreetMap</string>
     <string name="map_view">지도 보기</string>
     <string name="appearance">화면 모드</string>
-    <string name="glass_intensity">유리 투명도</string>
-    <string name="imagery_help">일본 국토지리원 영상입니다. 고해상도는 주로 일본에서 제공됩니다.</string>
+    <string name="glass_intensity">배경 흐림</string>
     <string name="reduce_motion">동작 줄이기</string>
     <string name="motion_help">기기의 애니메이션 설정도 따릅니다.</string>
     <string name="cancel">취소</string>
@@ -58,7 +57,6 @@
     <string name="confirm_sign_out">로그아웃할까요?</string>
     <string name="sign_out_help">이 앱에서 저장된 로그인 정보, 세션, 가져온 위치를 삭제합니다.</string>
     <string name="install_map_app">경로를 보려면 지도 앱을 설치하세요</string>
-    <string name="updating">업데이트 중…</string>
     <string name="connect_account">Apple 계정 연결</string>
     <string name="reload_auth">인증 페이지 새로 고침</string>
     <string name="connection_failed">연결할 수 없습니다</string>
@@ -88,7 +86,7 @@
     <string name="source_import_failed">호환되는 연결 또는 위치 파일을 선택하세요.</string>
     <string name="source_read_failed">연동을 읽을 수 없습니다. 파일이나 연결 설정을 확인하세요.</string>
     <string name="source_data">연동 데이터</string>
-    <string name="login_details">로그인 정보 및 자동 로그인</string>
+    <string name="login_details">Apple 로그인 정보 및 자동 로그인</string>
     <string name="email">이메일 주소</string>
     <string name="password">암호</string>
     <string name="saved_password_hint">저장됨 — 변경할 때만 입력</string>
@@ -184,4 +182,12 @@
     <string name="google_lost_explanation">기기를 잠그고 연락처를 표시합니다. 기기 설정에 따라 Google 계정에서 로그아웃하거나 월렛 결제 카드를 삭제하거나 추가 본인 확인을 요구할 수 있습니다.</string>
     <string name="google_sound_confirmation">%1$s에서 최대 5분 동안 최대 음량으로 울릴까요?</string>
     <string name="apple_session_restore_failed">저장된 Apple 연결을 복원하지 못했습니다. 다시 연결해 주세요.</string>
+    <string name="apple_login_stalled">연결이 예상보다 오래 걸립니다. 다시 시도하거나 Apple 로그인 화면을 여세요.</string>
+    <string name="apple_show_sign_in">Apple 로그인 화면 열기</string>
+    <string name="google_identity_ready">Google에 로그인했습니다. 기기를 표시하려면 Find Hub에 연결하세요.</string>
+    <string name="google_findhub_connect">Find Hub에 연결</string>
+    <string name="google_switch_account">다른 Google 계정 선택</string>
+    <string name="app_settings">앱 설정</string>
+    <string name="blur_help">패널 뒤에 있는 지도의 흐림 정도를 조절합니다.</string>
+    <string name="map_preview_sources">지도: © OpenStreetMap · OpenFreeMap · OpenMapTiles\n사진: 일본 국토지리원(GSI) 타일을 가공한 예시</string>
 </resources>
