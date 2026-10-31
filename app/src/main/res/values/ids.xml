@@ -2,4 +2,8 @@
 <resources>
     <item name="motion_springs" type="id" />
     <item name="motion_press" type="id" />
+    <item name="display_language" type="id" />
+    <item name="panel_done" type="id" />
+    <item name="device_disclosure" type="id" />
+    <item name="find_title" type="id" />
 </resources>

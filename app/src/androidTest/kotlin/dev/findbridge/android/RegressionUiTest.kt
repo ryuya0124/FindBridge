@@ -6,7 +6,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
-import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -66,14 +65,10 @@ class RegressionUiTest {
                 val point = Rect()
                 scenario.onActivity { activity ->
                     val panel = activity.findViewById<View>(MainActivity.PANEL_ID)
-                    val done =
-                        find(panel) {
-                            it is TextView &&
-                                it.text.toString() == activity.getString(R.string.done)
-                        }!!
+                    val row = panel.findViewById<View>(R.id.display_language)
                     assertTrue(
-                        "Done must be visible after scrolling: button=${done.top}/${done.height}, parent=${(done.parent as View).height}",
-                        done.getGlobalVisibleRect(point),
+                        "The lower settings row must remain visible after scrolling",
+                        row.getGlobalVisibleRect(point),
                     )
                     assertTrue(point.height() > 30 * activity.resources.displayMetrics.density)
                     val sheet = Rect()
@@ -112,10 +107,10 @@ class RegressionUiTest {
                 }
                 SystemClock.sleep(250)
                 scenario.onActivity { activity ->
-                    assertNull(
-                        "The settings panel must receive the touch and close",
-                        activity.findViewById<View>(MainActivity.PANEL_ID),
-                    )
+                    val next = activity.findViewById<View>(MainActivity.PANEL_ID)
+                    assertNotNull("The language picker must open", next)
+                    assertEquals(activity.getString(R.string.language), next.accessibilityPaneTitle)
+                    next.findViewById<View>(R.id.panel_done).performClick()
                 }
             }
         } finally {

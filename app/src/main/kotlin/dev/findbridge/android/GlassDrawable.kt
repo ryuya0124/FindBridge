@@ -83,7 +83,11 @@ internal class GlassDrawable(
                 )
                 canvas.restore()
             }
-            paint.color = if (Ui.dark) 0xe82b2b31.toInt() else 0xe8fafafd.toInt()
+            // Before the map-only backdrop arrives, keep underlying UI text out
+            // of the material instead of blending the sheet through the modal.
+            val tintAlpha = if (bitmap == null) 255 else 232
+            paint.color = if (Ui.dark) 0xff2b2b31.toInt() else 0xfffafafd.toInt()
+            paint.alpha = tintAlpha * drawableAlpha / 255
             canvas.drawRoundRect(rect, radius, radius, paint)
             if (contact > 0f) {
                 paint.color = android.graphics.Color.argb((contact * 26).toInt(), 255, 255, 255)

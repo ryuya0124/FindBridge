@@ -3,14 +3,56 @@ package dev.findbridge.android
 import android.view.Choreographer
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
+import org.junit.Assume.assumeFalse
 import org.junit.Test
 
 class RefreshButtonTest {
+    @Test
+    fun refreshDoesNotReplaceTheMapTitle() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val apple = AppleRepository.get(context)
+        val google = GoogleRepository.get(context)
+        val sync = LocationSyncRepository.get(context)
+        assumeFalse(apple.hasSession || google.connected || LoginVault(context).hasSaved)
+        val sources = listOf(apple, google, sync)
+        val fields = sources.map {
+            it.javaClass.getDeclaredField("loading").apply { isAccessible = true }
+        }
+        val original = sources.mapIndexed { index, source -> fields[index].getBoolean(source) }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    val title = activity.findViewById<TextView>(R.id.find_title)
+                    for ((index, source) in sources.withIndex()) {
+                        fields[index].setBoolean(source, true)
+                        activity.onChanged()
+                        assertEquals(activity.getString(R.string.find_title), title.text.toString())
+                        if (index < 2) {
+                            assertTrue(
+                                activity
+                                    .findViewById<RefreshButton>(MainActivity.REFRESH_ID)
+                                    .refreshing
+                            )
+                        }
+                        fields[index].setBoolean(source, false)
+                        activity.onChanged()
+                        assertEquals(activity.getString(R.string.find_title), title.text.toString())
+                    }
+                }
+            }
+        } finally {
+            sources.forEachIndexed { index, source ->
+                fields[index].setBoolean(source, original[index])
+            }
+        }
+    }
+
     @Test
     fun loadingOnlyAnimatesTheIndicatorAndStopsWhenDetached() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

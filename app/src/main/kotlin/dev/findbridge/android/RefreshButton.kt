@@ -17,6 +17,7 @@ internal class RefreshButton(context: Context) : Button(context) {
         REFRESH,
         MORE,
         ADD,
+        CLOSE,
     }
 
     var symbol: Symbol? = null
@@ -145,6 +146,22 @@ internal class RefreshButton(context: Context) : Button(context) {
                     Symbol.ADD -> {
                         canvas.drawLine(x - 7 * unit, y, x + 7 * unit, y, paint)
                         canvas.drawLine(x, y - 7 * unit, x, y + 7 * unit, paint)
+                    }
+                    Symbol.CLOSE -> {
+                        canvas.drawLine(
+                            x - 5 * unit,
+                            y - 5 * unit,
+                            x + 5 * unit,
+                            y + 5 * unit,
+                            paint,
+                        )
+                        canvas.drawLine(
+                            x + 5 * unit,
+                            y - 5 * unit,
+                            x - 5 * unit,
+                            y + 5 * unit,
+                            paint,
+                        )
                     }
                     null -> Unit
                 }
