@@ -61,6 +61,8 @@ R6はFiRaのアクセサリーとの測距と、双方で設定データを交�
 
 実機のシステムUWBサービス・HALの静的な文字列、SDK 37.0の `UwbRangingParams` も確認しました。公開設定はFiRaのDS-TWR系で、NBAMMSを選ぶ入口は確認できませんでした。文字列にないことだけで、シリコンの物理的な不対応までは断定しません。チャンネル9が同じでも、波形・認証・開始手順の互換性を意味しません。
 
+Qualcommの[FastConnect 8800の公式資料](https://docs.qualcomm.com/doc/87-97133-1/87-97133-1_REV_AA_Qualcomm_FastConnect_8800_Mobile_Connectivity_System_Product_Brief.pdf)にはNBA-MMSとIEEE 802.15.4abが明記されています。一方、[7900の公式資料](https://docs.qualcomm.com/bundle/publicresource/87-73970-1_REV_C_Qualcomm_FastConnect_7900_Mobile_Connectivity_System_Product_Brief.pdf)は802.15.4z・FiRa・CCCを記載しています。これは製品系列による対応方式の違いを調べる手掛かりであり、このGalaxyの8800搭載やNBAMMS対応、Appleとの互換性、Android APIからの利用可能性を証明するものではありません。
+
 またAppleは、日本でPeople FindingやApple Watchの精密探索などが利用できないと[説明しています](https://support.apple.com/en-tm/109512)。Galaxy側の国コードを変える対応は行いません。
 
 ## Kotlinへ追加した処理
