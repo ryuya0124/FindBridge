@@ -21,7 +21,6 @@ import android.view.WindowInsets
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.RelativeLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -70,6 +69,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private lateinit var locationSync: LocationSyncRepository
     private lateinit var appearance: AppearanceSettings
     private lateinit var glass: GlassScene
+    private lateinit var accountActions: AccountMenu
     private lateinit var frameRate: MapFrameRate
     private lateinit var root: FrameLayout
     private lateinit var mapView: MapView
@@ -179,10 +179,15 @@ class MainActivity : Activity(), AppleRepository.Listener {
             }
         if (android.os.Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         mapView =
-            MapView(this).apply {
-                id = MAP_ID
-                onCreate(savedInstanceState)
-            }
+            MapView(
+                    this,
+                    org.maplibre.android.maps.MapLibreMapOptions.createFromAttributes(this)
+                        .textureMode(android.os.Build.VERSION.SDK_INT >= 33),
+                )
+                .apply {
+                    id = MAP_ID
+                    onCreate(savedInstanceState)
+                }
         root.addView(mapView, FrameLayout.LayoutParams(-1, -1))
         selectedPin =
             ImageView(this).apply {
@@ -194,6 +199,17 @@ class MainActivity : Activity(), AppleRepository.Listener {
             }
         root.addView(selectedPin, FrameLayout.LayoutParams(dp(66), dp(74)))
         glass = GlassScene(mapView).apply { intensity = appearance.glassIntensity }
+        accountActions =
+            AccountMenu(this, glass) {
+                val bounds = currentLayout().sheet
+                val origin = IntArray(2).also(root::getLocationOnScreen)
+                android.graphics.Rect(
+                    bounds.left + origin[0],
+                    bounds.top + origin[1],
+                    bounds.right + origin[0],
+                    bounds.bottom + origin[1],
+                )
+            }
         frameRate = MapFrameRate(this, mapView)
         mapView.getMapAsync { value ->
             map = value
@@ -229,7 +245,13 @@ class MainActivity : Activity(), AppleRepository.Listener {
             }
             value.addOnCameraMoveListener {
                 positionSelectedPin()
+                glass.trackCamera(value)
             }
+            mapView.addOnDidFinishRenderingFrameListener(
+                MapView.OnDidFinishRenderingFrameListener { _, _, _ ->
+                    glass.onMapFrame()
+                }
+            )
             value.addOnCameraIdleListener {
                 if (rememberOverviewZoom) {
                     rememberOverviewZoom = false
@@ -761,6 +783,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun presentPanel(content: LinearLayout, anchor: View? = null) {
+        accountActions.dismiss()
         displaySettings?.dismissChoices()
         displaySettingsOpen = false
         panel?.dismiss(immediate = true)
@@ -1596,23 +1619,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun accountMenu(anchor: View) {
-        PopupMenu(this, anchor).apply {
-            menu
-                .add(
-                    if (repository.hasSession) getString(R.string.reconnect_account)
-                    else getString(R.string.sign_in)
-                )
-                .setOnMenuItemClickListener {
-                    connect()
-                    true
-                }
-            if (repository.hasSession)
-                menu.add(getString(R.string.sign_out)).setOnMenuItemClickListener {
-                    confirmLogout()
-                    true
-                }
-            show()
-        }
+        displaySettings?.dismissChoices()
+        accountActions.show(anchor, repository.hasSession, ::connect, ::confirmLogout)
     }
 
     private fun confirmLogout() {
@@ -2029,6 +2037,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onDestroy() {
+        accountActions.dismiss()
         repository.removeListener(this)
         google.removeListener(this)
         locationSync.removeListener(this)

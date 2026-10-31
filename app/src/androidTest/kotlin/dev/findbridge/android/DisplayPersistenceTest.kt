@@ -48,10 +48,7 @@ class DisplayPersistenceTest {
                     activity.window.decorView.invalidate()
                 }
                 assertTrue(drawn.await(5, TimeUnit.SECONDS))
-                scenario.onActivity { activity ->
-                    activity.findViewById<View>(R.id.display_language).performClick()
-                }
-                instrumentation.uiAutomation.waitForIdle(100, 5000)
+                openMenu(scenario, R.id.display_language)
                 assertTrue(
                     instrumentation.uiAutomation.rootInActiveWindow
                         .findAccessibilityNodeInfosByText("日本語")
@@ -65,8 +62,8 @@ class DisplayPersistenceTest {
                         parent,
                         activity.findViewById(MainActivity.PANEL_ID),
                     )
-                    activity.findViewById<View>(R.id.display_appearance).performClick()
                 }
+                openMenu(scenario, R.id.display_appearance)
                 val dark = context.getString(R.string.dark)
                 awaitRestoredPanel(scenario) { choose(dark) }
                 scenario.onActivity { activity ->
@@ -75,8 +72,8 @@ class DisplayPersistenceTest {
                         activity.getString(R.string.map_view),
                         activity.findViewById<View>(MainActivity.PANEL_ID).accessibilityPaneTitle,
                     )
-                    activity.findViewById<View>(R.id.display_language).performClick()
                 }
+                openMenu(scenario, R.id.display_language)
                 val nextLanguage = if (oldLocales.toLanguageTags() == "de") "日本語" else "Deutsch"
                 awaitRestoredPanel(scenario) { choose(nextLanguage) }
                 scenario.onActivity { activity ->
@@ -125,6 +122,19 @@ class DisplayPersistenceTest {
         } finally {
             settings.reduceMotion = previous
         }
+    }
+
+    private fun openMenu(scenario: ActivityScenario<MainActivity>, id: Int) {
+        // Wait for the popup's window, rather than querying the previous accessibility root.
+        instrumentation.uiAutomation.executeAndWaitForEvent(
+            { scenario.onActivity { it.findViewById<View>(id).performClick() } },
+            { event ->
+                event.eventType ==
+                    android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            },
+            5000,
+        )
+        instrumentation.uiAutomation.waitForIdle(100, 5000)
     }
 
     private fun choose(label: String) {

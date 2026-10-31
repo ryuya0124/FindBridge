@@ -7,5 +7,6 @@
     <item name="device_disclosure" type="id" />
     <item name="find_title" type="id" />
     <item name="display_choices" type="id" />
+    <item name="account_actions" type="id" />
     <item name="display_appearance" type="id" />
 </resources>

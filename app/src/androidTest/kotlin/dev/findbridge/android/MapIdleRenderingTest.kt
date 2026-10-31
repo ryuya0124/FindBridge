@@ -106,7 +106,11 @@ class MapIdleRenderingTest {
                             isAccessible = true
                         }
                     var last = 0L
-                    instrumentation.runOnMainSync { last = timestamp.getLong(scene) }
+                    var idleGpuFrame = 0L
+                    instrumentation.runOnMainSync {
+                        last = timestamp.getLong(scene)
+                        idleGpuFrame = scene.liveBackdrop?.frames ?: 0L
+                    }
                     frames.set(0)
                     var captures = 0
                     repeat(60) {
@@ -120,13 +124,20 @@ class MapIdleRenderingTest {
                         }
                     }
                     println(
-                        "$mode idle 6s: backdropSnapshots=$captures mapFrames=${frames.get()} refreshMode=${view.renderingRefreshMode}"
+                        "$mode idle 6s: backdropSnapshots=$captures mapFrames=${frames.get()} renderer=${view.renderView.javaClass.simpleName}"
                     )
                     assertEquals(
                         "A still map must not repeatedly read GPU pixels for glass",
                         0,
                         captures,
                     )
+                    instrumentation.runOnMainSync {
+                        assertEquals(
+                            "Still glass must stop GPU re-recording",
+                            idleGpuFrame,
+                            scene.liveBackdrop?.frames ?: 0L,
+                        )
+                    }
                     frames.set(0)
                     scenario.onActivity { activity ->
                         val currentMap =
@@ -140,113 +151,129 @@ class MapIdleRenderingTest {
                     SystemClock.sleep(1500)
                     println("$mode single backdrop copy: extraMapFrames=${frames.get()}")
                     extraMapFrames += frames.get()
-                    instrumentation.runOnMainSync {
-                        assertEquals(
-                            "The GPU surface copy must use the glass resolution",
-                            minOf(view.width, 640),
-                            scene.bitmap?.width,
-                        )
-                        val colors = mutableSetOf<Int>()
-                        scene.bitmap!!.let { image ->
-                            for (y in 0 until image.height step 32) for (x in
-                                0 until image.width step 32) colors += image.getPixel(x, y)
+                    if (scene.liveBackdrop != null) {
+                        instrumentation.runOnMainSync {
+                            assertNull(
+                                "Live GPU glass must not allocate readback bitmaps",
+                                scene.bitmap,
+                            )
+                            assertTrue(view.renderView is android.view.TextureView)
+                            assertEquals(view.width, scene.liveBackdrop!!.width)
+                            assertEquals(view.height, scene.liveBackdrop!!.height)
+                            assertEquals(minOf(view.width, 640), scene.liveBackdrop!!.node.width)
                         }
-                        assertTrue(
-                            "The copied backdrop must contain rendered map pixels",
-                            colors.size > 16,
-                        )
-                    }
-                    if (darkQa && mode == MapMode.AERIAL) {
-                        val screenshot = instrumentation.uiAutomation.takeScreenshot()
-                        java.io
-                            .File(instrumentation.targetContext.cacheDir, "dark-aerial-tabs.png")
-                            .outputStream()
-                            .use {
-                                screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    } else {
+                        instrumentation.runOnMainSync {
+                            assertEquals(
+                                "The GPU surface copy must use the glass resolution",
+                                minOf(view.width, 640),
+                                scene.bitmap?.width,
+                            )
+                            val colors = mutableSetOf<Int>()
+                            scene.bitmap!!.let { image ->
+                                for (y in 0 until image.height step 32) for (x in
+                                    0 until image.width step 32) colors += image.getPixel(x, y)
                             }
-                        screenshot.recycle()
-                    }
-                    val aligned = CountDownLatch(1)
-                    var alignmentFailure: Throwable? = null
-                    scenario.onActivity { activity ->
-                        val currentMap =
-                            MainActivity::class
-                                .java
-                                .getDeclaredField("map")
-                                .apply {
+                            assertTrue(
+                                "The copied backdrop must contain rendered map pixels",
+                                colors.size > 16,
+                            )
+                        }
+                        if (darkQa && mode == MapMode.AERIAL) {
+                            val screenshot = instrumentation.uiAutomation.takeScreenshot()
+                            java.io
+                                .File(
+                                    instrumentation.targetContext.cacheDir,
+                                    "dark-aerial-tabs.png",
+                                )
+                                .outputStream()
+                                .use {
+                                    screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+                                }
+                            screenshot.recycle()
+                        }
+                        val aligned = CountDownLatch(1)
+                        var alignmentFailure: Throwable? = null
+                        scenario.onActivity { activity ->
+                            val currentMap =
+                                MainActivity::class
+                                    .java
+                                    .getDeclaredField("map")
+                                    .apply {
+                                        isAccessible = true
+                                    }
+                                    .get(activity) as MapLibreMap
+                            val points =
+                                floatArrayOf(
+                                    view.width * .37f,
+                                    view.height * .44f,
+                                    view.width * .63f,
+                                    view.height * .58f,
+                                )
+                            val geography =
+                                (0..1).map {
+                                    currentMap.projection.fromScreenLocation(
+                                        PointF(points[it * 2], points[it * 2 + 1])
+                                    )
+                                }
+                            // Model a readback/blur already in flight. The visible old pixels
+                            // still have to align before any replacement bitmap can arrive.
+                            val pending =
+                                GlassScene::class.java.getDeclaredField("pending").apply {
                                     isAccessible = true
                                 }
-                                .get(activity) as MapLibreMap
-                        val points =
-                            floatArrayOf(
-                                view.width * .37f,
-                                view.height * .44f,
-                                view.width * .63f,
-                                view.height * .58f,
-                            )
-                        val geography =
-                            (0..1).map {
-                                currentMap.projection.fromScreenLocation(
-                                    PointF(points[it * 2], points[it * 2 + 1])
+                            val before = scene.bitmap
+                            pending.setBoolean(scene, true)
+                            currentMap.moveCamera(
+                                CameraUpdateFactory.newCameraPosition(
+                                    CameraPosition.Builder(currentMap.cameraPosition)
+                                        .target(LatLng(35.681, 139.763))
+                                        .zoom(14.2)
+                                        .bearing(23.0)
+                                        .tilt(25.0)
+                                        .build()
                                 )
-                            }
-                        // Model a readback/blur already in flight. The visible old pixels
-                        // still have to align before any replacement bitmap can arrive.
-                        val pending =
-                            GlassScene::class.java.getDeclaredField("pending").apply {
-                                isAccessible = true
-                            }
-                        val before = scene.bitmap
-                        pending.setBoolean(scene, true)
-                        currentMap.moveCamera(
-                            CameraUpdateFactory.newCameraPosition(
-                                CameraPosition.Builder(currentMap.cameraPosition)
-                                    .target(LatLng(35.681, 139.763))
-                                    .zoom(14.2)
-                                    .bearing(23.0)
-                                    .tilt(25.0)
-                                    .build()
                             )
-                        )
-                        view.postOnAnimation {
                             view.postOnAnimation {
-                                try {
-                                    assertSame(
-                                        "Reprojection must not wait for another bitmap",
-                                        before,
-                                        scene.bitmap,
-                                    )
-                                    scene.viewportTransform.mapPoints(points)
-                                    geography.forEachIndexed { index, coordinate ->
-                                        val expected =
-                                            currentMap.projection.toScreenLocation(coordinate)
-                                        assertEquals(
-                                            "Backdrop x must match the real map projection",
-                                            expected.x,
-                                            points[index * 2],
-                                            3f,
+                                view.postOnAnimation {
+                                    try {
+                                        assertSame(
+                                            "Reprojection must not wait for another bitmap",
+                                            before,
+                                            scene.bitmap,
                                         )
-                                        assertEquals(
-                                            "Backdrop y must match the real map projection",
-                                            expected.y,
-                                            points[index * 2 + 1],
-                                            3f,
-                                        )
+                                        scene.viewportTransform.mapPoints(points)
+                                        geography.forEachIndexed { index, coordinate ->
+                                            val expected =
+                                                currentMap.projection.toScreenLocation(coordinate)
+                                            assertEquals(
+                                                "Backdrop x must match the real map projection",
+                                                expected.x,
+                                                points[index * 2],
+                                                3f,
+                                            )
+                                            assertEquals(
+                                                "Backdrop y must match the real map projection",
+                                                expected.y,
+                                                points[index * 2 + 1],
+                                                3f,
+                                            )
+                                        }
+                                    } catch (failure: Throwable) {
+                                        alignmentFailure = failure
+                                    } finally {
+                                        pending.setBoolean(scene, false)
+                                        aligned.countDown()
                                     }
-                                } catch (failure: Throwable) {
-                                    alignmentFailure = failure
-                                } finally {
-                                    pending.setBoolean(scene, false)
-                                    aligned.countDown()
                                 }
                             }
                         }
+                        assertTrue(
+                            "The next displayed frames must align the backdrop",
+                            aligned.await(5, TimeUnit.SECONDS),
+                        )
+                        alignmentFailure?.let { throw it }
                     }
-                    assertTrue(
-                        "The next displayed frames must align the backdrop",
-                        aligned.await(5, TimeUnit.SECONDS),
-                    )
-                    alignmentFailure?.let { throw it }
                     measureMovingCadence(scenario, view, scene, mode)
                 }
             }
@@ -274,6 +301,10 @@ class MapIdleRenderingTest {
         var requestedHz = 0f
         var previousBackdrop: Bitmap? = null
         var backdropUpdates = 0
+        var previousLiveFrame = 0L
+        var draws = 0
+        var staleDraws = 0
+        var drawnLiveFrame = -1L
         var failure: Throwable? = null
         scenario.onActivity { activity ->
             val map =
@@ -285,6 +316,16 @@ class MapIdleRenderingTest {
                     }
                     .get(activity) as MapLibreMap
             view.addOnWillStartRenderingFrameListener { if (moving) mapFrames.incrementAndGet() }
+            val drawing =
+                android.view.ViewTreeObserver.OnDrawListener {
+                    if (moving && scene.liveBackdrop != null) {
+                        draws++
+                        val next = scene.liveBackdrop!!.frames
+                        if (next == drawnLiveFrame) staleDraws++
+                        drawnLiveFrame = next
+                    }
+                }
+            view.viewTreeObserver.addOnDrawListener(drawing)
             val callback =
                 object : Choreographer.FrameCallback {
                     override fun doFrame(frameTimeNanos: Long) {
@@ -292,7 +333,9 @@ class MapIdleRenderingTest {
                         requestedHz =
                             maxOf(requestedHz, activity.window.attributes.preferredRefreshRate)
                         ticks += frameTimeNanos
-                        if (scene.bitmap !== previousBackdrop) {
+                        val liveFrame = scene.liveBackdrop?.frames ?: 0L
+                        if (liveFrame != previousLiveFrame || scene.bitmap !== previousBackdrop) {
+                            previousLiveFrame = liveFrame
                             previousBackdrop = scene.bitmap
                             backdropUpdates++
                         }
@@ -304,6 +347,7 @@ class MapIdleRenderingTest {
                 moving = false
                 Choreographer.getInstance().removeFrameCallback(callback)
                 view.postOnAnimation {
+                    view.viewTreeObserver.removeOnDrawListener(drawing)
                     try {
                         assertEquals(
                             "Idle releases the high-refresh vote",
@@ -341,9 +385,13 @@ class MapIdleRenderingTest {
         failure?.let { throw it }
         assertTrue("Map movement requests the display's high cadence", requestedHz >= 60f)
         assertTrue("Vsync must drive the moving backdrop", ticks.size >= 5)
+        if (scene.liveBackdrop != null) {
+            assertTrue("Moving glass must be drawn with the map", draws >= 5)
+            assertEquals("Every drawn moving frame must use the current GPU texture", 0, staleDraws)
+        }
         val intervals = ticks.zipWithNext { a, b -> (b - a) / 1_000_000.0 }.sorted()
         println(
-            "$mode moving: requestedHz=$requestedHz vsyncMedianMs=${intervals[intervals.size / 2]} callbacks=${ticks.size} mapFrames=${mapFrames.get()} backdropUpdates=$backdropUpdates"
+            "$mode moving: requestedHz=$requestedHz vsyncMedianMs=${intervals[intervals.size / 2]} callbacks=${ticks.size} mapFrames=${mapFrames.get()} backdropUpdates=$backdropUpdates gpuDraws=$draws staleGpuDraws=$staleDraws"
         )
     }
 }
