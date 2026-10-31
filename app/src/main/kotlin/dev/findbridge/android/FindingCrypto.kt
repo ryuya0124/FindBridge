@@ -32,13 +32,24 @@ internal object FindingCrypto {
         return hkdf(irk, byteArrayOf(), sessionIdentifier, 32)
     }
 
-    /** Only the unbucketed Mac NITokenService branch; bucket serialization is not verified. */
+    /** The owner-token branch uses an empty info field; it does not use a rotation index. */
     fun deriveUnbucketedDiscoverySecret(sharedSecret: ByteArray): ByteArray {
-        require(sharedSecret.isNotEmpty())
+        require(sharedSecret.size == 32)
         return hkdf(
             sharedSecret,
             "NITokenService.salt".toByteArray(Charsets.UTF_8),
             byteArrayOf(),
+            16,
+        )
+    }
+
+    /** Verified UInt64.data encoding: eight little-endian bytes, including the high bit. */
+    fun deriveBucketedDiscoverySecret(sharedSecret: ByteArray, index: ULong): ByteArray {
+        require(sharedSecret.size == 32)
+        return hkdf(
+            sharedSecret,
+            "NITokenService.salt".toByteArray(Charsets.UTF_8),
+            littleEndian(index.toLong()),
             16,
         )
     }

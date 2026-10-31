@@ -29,7 +29,7 @@ SM-S948QのUWBサービス情報と、Androidの公開 `RangingManager` の機�
 `FindingCrypto.kt` に、[24A446の静的解析記録](UWB-24A446.md)で確認した処理を移植しました。
 
 - 16バイトのIRKと8バイトのsession identifierからのHKDF-SHA256によるセッション鍵導出。
-- Mac版の `NITokenService.salt` を使う16バイトの導出。bucket付き経路は未実装。
+- Mac版の `NITokenService.salt` を使う16バイトの導出。続く調査でbucket付きの導出・境界モデルも追加しました。[追加実装と検証](UWB-OWNER-FLOW.md)を参照してください。
 - SipHash-2-4によるアドレス計算と役割別challenge/response。
 - AES-CCMのエンベロープ生成・認証付き復号。
 - 毎回新しいsession identifierを作る送信コンテキスト。counterの増加、枯渇時の拒否、終了時の鍵配列の消去。
