@@ -15,7 +15,7 @@
 
 iOSの実装名は `/usr/libexec/findmylocated` です。Macの `findmylocateagent` と同名だと仮定すると取得できませんでした。[Apple CDNの公式IPSW](https://updates.cdn-apple.com/2026FallFCS/052dd27b-a831-4746-b00a-2e6a7f5a5586/iPhone18,3_27.0.1_24A446_Restore.ipsw)から必要なファイルを抽出し、終了後に抽出用マウントが残っていないことを確認しました。
 
-このOSの静的解析は、対象iPhoneが現在そのOSで動作していることの確認ではありません。Xcodeがconnectedと返したiPhone 17 / 27.2は `reality=simulated` のシミュレーターであり、実機測距の証拠には使っていません。OSバイナリ、仕様書PDF、個人の端末識別情報、逆アセンブル全文はGitへ含めません。
+取得物だけでは実機のOS版を証明できないため、接続状態を再確認しました。XcodeのiPhone 17 / 27.2は `reality=simulated` のシミュレーターです。その後、別の `reality=physical` / iPhone18,3が接続され、読み取り専用の `devicectl device info details` でiOS 27.0.1 / 24A446と確認しました。このOS一致は、無線方式の互換性や実測の証明ではありません。OSバイナリ、仕様書PDF、個人の端末識別情報、逆アセンブル全文はGitへ含めません。
 
 ## 所有者鍵はデバイス上の乱数から作られる
 
@@ -42,6 +42,24 @@ iOSの作成処理 `0x10008c848` で、次の順序を確認しました。
 デーモンの静的entitlementには `com.apple.private.alloy.fmf.local` と、IDS messaging / registration / remote credentialsが含まれます。Macの `FindMyMessaging.LocalMessaging` にもIDSService・接続端末変更のコールバック等があり、Deviceには `isLocallyPaired`・`isConnected`・destination等があります。Macの `0x23bb7adbc` はIDSDeviceの `isLocallyPaired` を読み、`0x23bb7ae5c` でDeviceの対応フィールドへ保存します。
 
 **Apple AccountへWebでログインできることと、このIDSサービスの正規の相手として参加できることは別です。** `force` が認証を迂回する引数だという根拠もありません。Androidから利用できる正規の登録・鍵配送は、まだ確認できていません。実アカウントのKeychain・DB・所有者鍵を読み出したり、Macを配送ブリッジにしたりはしていません。
+
+### インターネット用の `ownerToken` も受信分岐を確認
+
+`FriendSharingMessageType` には `ownerToken` という名前も残っていたため、LocalMessaging以外に取得経路がないか調べました。`NITokenService` の `IDSTransportServiceClient` 適合から、実際の受信コールバックまで追跡しています。
+
+| 24A446の箇所 | 確認した内容 |
+| --- | --- |
+| enum記述子 `0x1005d31d8` | payload付きcaseは0、空caseは7。`ownerToken` は3番目 |
+| `RawRepresentable` getter `0x100371b14` | enumの1バイト値をInt32へそのまま保存する。`init(rawValue:)` 側も0〜6を受け付ける |
+| `IDSTransportServiceClient` 適合 `0x1005b5490` | witness patternは `0x1006ac4c0`。受信側のasync記述子 `0x1005b5470` から `0x1004d7674` へ進む |
+| 受信側のラッパー `0x1004d7674` | 実処理のasync記述子 `0x1005b54c0`、実装 `0x1004d8010` を呼ぶ |
+| 継続処理 `0x1004d8690`〜`0x1004d882c` | Message.typeを読み、値2は `0x1004d9434` の終了処理へ進む |
+
+値1・3・4・5・6は、それぞれFindingToken・FindingTokenRequest・FindingConfig・ConfigSessionStop・FindingTokenRevokeのエンベロープを取り出す処理へ進みます。値2に対応する所有者鍵の取り出し・保存は、この受信処理にはありません。`ownerToken` という項目名が存在することを、そのまま有効なインターネット経由の鍵取得APIとは扱えません。
+
+これは取得した24A446のNITokenServiceに対する静的な結果です。異なるビルドのenum番号を通信値として転用せず、全てのIDSサービス・受信者に対する不在の証明ともしていません。実際のIDS送信や架空の端末登録は実行していません。
+
+名前の確認は既存の `inspect_swift_fields.py --type FriendSharingMessageType`、分岐の確認は取得済みの `ipsw macho disass` で上記アドレスを指定すると再現できます。Swiftの[conformance / witness tableの定義](https://github.com/swiftlang/swift/blob/main/include/swift/ABI/Metadata.h)も参照しました。実アカウントのレコードを入力する手順ではありません。
 
 ## R6はFiRaアクセサリー用の設定交換
 
@@ -91,6 +109,17 @@ python3 tools/verify_uwb_advertisements.py --output research/uwb-advertisements/
 - JVMの単体テスト38件が成功。新規12件はHKDF・OPACK・タグ・bucket境界・広告の既知入力と不正入力を検証します。
 - Macの実受信パーサーとの比較はダミー値8件で成功。無線で受信したデータではありません。
 - DebugビルドとLint成功。Lintは既存の警告46件、エラー0件で、今回のFinding関連ファイルに警告はありません。
+- コードの変更を含む `41c4fd5` の[GitHub CI](https://github.com/ryuya0124/FindBridge/actions/runs/41169192259)も成功。Debug / Releaseビルド・Lint、JVMテスト、verificationビルド・Lintを実行しました。
 - 実機ではUWB能力とシステム実装を読み取っただけです。実際のサウンド、紛失・消去、BLE書き込み、UWBセッション開始は実行していません。
 
 次に必要なのは、対象iPhoneへ結び付く所有者鍵をAndroidへ正規に配送する方法と、相互認証後のNBAMMSをGalaxyの無線実装から実行できることの確認です。この2点を満たす経路はまだ得られていません。純粋関数と広告パーサーは製品の探索UIへ接続せず、距離や方向を表示する機能として配布しません。
+
+| 最終目標に必要な条件 | 現在の証拠と不足 |
+| --- | --- |
+| 所有者トークンの取得・更新 | 生成元・導出・配送の静的な処理を確認。Androidへの正規配送と実際の更新は未実装 |
+| 対象iPhoneとの対応付け | 端末モデル・OSと広告形式を確認。対象用の鍵と実際の近傍広告の照合は未確認 |
+| 認証済みの開始 | 暗号の既知入力は一致。対象との相互認証・開始手順全体は未実装 |
+| Galaxyの対応方式 | FiRa等の能力を読み取り。NBAMMSを開始できる入口は未確認 |
+| 距離コールバック | UWBセッションを開始しておらず、実測なし |
+
+テスト成功やOS版の一致だけでは、これらの未解決条件を完了にはできません。画面操作・追加ログイン・iPhone用の連携アプリの導入も今回行っていません。
