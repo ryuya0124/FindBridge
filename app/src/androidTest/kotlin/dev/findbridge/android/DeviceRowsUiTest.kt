@@ -95,11 +95,7 @@ class DeviceRowsUiTest {
                         )
                         assertTrue(namePosition[0] + name.width <= batteryPosition[0])
                         val row = name.parent.parent as ViewGroup
-                        val chevron =
-                            (0 until row.childCount)
-                                .map { row.getChildAt(it) }
-                                .filterIsInstance<TextView>()
-                                .single { it.text == "›" }
+                        val chevron = row.findViewById<View>(R.id.device_disclosure)
                         assertTrue(
                             kotlin.math.abs(row.height / 2 - chevron.top - chevron.height / 2) <= 1
                         )

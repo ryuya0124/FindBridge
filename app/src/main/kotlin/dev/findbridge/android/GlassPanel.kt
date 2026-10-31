@@ -7,10 +7,10 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.TextView
 import androidx.dynamicanimation.animation.DynamicAnimation
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.dp
-import dev.findbridge.android.Ui.space
 
 /**
  * Native anchored presentation. Its backdrop remains the same map during presentation and
@@ -28,7 +28,21 @@ internal class GlassPanel(
     safeBounds: ScreenRect,
     private val onDismiss: () -> Unit,
 ) : FrameLayout(activity) {
-    private val panel = FrameLayout(activity)
+    private var maximumHeight = Int.MAX_VALUE
+    private val panel =
+        object : LinearLayout(activity) {
+                override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                    val available =
+                        if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED)
+                            maximumHeight
+                        else minOf(maximumHeight, MeasureSpec.getSize(heightMeasureSpec))
+                    super.onMeasure(
+                        widthMeasureSpec,
+                        MeasureSpec.makeMeasureSpec(available, MeasureSpec.AT_MOST),
+                    )
+                }
+            }
+            .apply { orientation = LinearLayout.VERTICAL }
     private val scrim = View(activity)
     private var closing = false
     private val accessibility = mutableMapOf<View, Int>()
@@ -54,22 +68,44 @@ internal class GlassPanel(
         panel.clipToOutline = true
         panel.elevation = activity.dp(12).toFloat()
         panel.isClickable = true
-        val scroll = ScrollView(activity).apply { isFillViewport = false }
+        val title = (content.getChildAt(0) as? TextView)?.also(content::removeView)
+        val header =
+            LinearLayout(activity).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = activity.dp(62)
+                setPadding(activity.dp(22), activity.dp(5), activity.dp(12), activity.dp(5))
+            }
+        header.addView(title ?: View(activity), LinearLayout.LayoutParams(0, -2, 1f))
+        title?.apply {
+            maxLines = 2
+            isAccessibilityHeading = true
+        }
+        header.addView(
+            activity.actionButton(activity.getString(R.string.done), false).apply {
+                id = R.id.panel_done
+                textSize = 16f
+                background = Ui.ripple(Color.TRANSPARENT, activity.dp(16))
+                minimumWidth = activity.dp(58)
+                minWidth = activity.dp(58)
+                setOnClickListener { dismiss() }
+            },
+            LinearLayout.LayoutParams(-2, activity.dp(44)).apply { marginStart = activity.dp(8) },
+        )
+        panel.addView(header, LinearLayout.LayoutParams(-1, -2))
+        val scroll =
+            ScrollView(activity).apply {
+                isFillViewport = false
+                clipToPadding = false
+                isVerticalScrollBarEnabled = false
+            }
         content.setPadding(
             content.paddingLeft,
-            activity.dp(18),
+            0,
             content.paddingRight,
             activity.dp(16),
         )
-        activity.space(content, 14)
-        content.addView(
-            activity.actionButton(activity.getString(R.string.done), false).apply {
-                setOnClickListener { dismiss() }
-            },
-            LinearLayout.LayoutParams(-1, activity.dp(46)),
-        )
         scroll.addView(content)
-        panel.addView(scroll, LayoutParams(-1, -2))
+        panel.addView(scroll, LinearLayout.LayoutParams(-1, -2))
         val width =
             minOf(safeBounds.width - activity.dp(24), activity.dp(360))
                 .coerceAtLeast(activity.dp(120))
@@ -85,6 +121,7 @@ internal class GlassPanel(
                 .coerceAtMost(safeBounds.bottom - activity.dp(180))
                 .coerceAtLeast(safeBounds.top + activity.dp(8))
         val maximum = (safeBounds.bottom - top - activity.dp(16)).coerceAtLeast(activity.dp(60))
+        maximumHeight = maximum
         addView(
             panel,
             LayoutParams(width, -2, Gravity.TOP or Gravity.END).apply {
@@ -105,8 +142,6 @@ internal class GlassPanel(
                     or: Int,
                     ob: Int,
                 ) {
-                    if (b - t > maximum)
-                        panel.layoutParams = panel.layoutParams.apply { height = maximum }
                     panel.removeOnLayoutChangeListener(this)
                     panel.pivotX =
                         if (anchor != null) anchorOrigin[0] - rootOrigin[0] + anchor.width / 2f - l
@@ -121,7 +156,7 @@ internal class GlassPanel(
         root.addView(this, LayoutParams(-1, -1))
         bringToFront()
         requestFocus()
-        accessibilityPaneTitle = activity.getString(R.string.map_display_settings)
+        accessibilityPaneTitle = title?.text ?: activity.getString(R.string.map_display_settings)
     }
 
     private fun reveal() {

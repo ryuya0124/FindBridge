@@ -1,6 +1,7 @@
 package dev.findbridge.android
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
 import android.os.Handler
@@ -19,6 +20,42 @@ import org.junit.Test
 
 /** Samples the real hardware shader over dark aerial/water pixels, not a CPU formula copy. */
 class LightGlassContrastTest {
+    @Test
+    fun initialMaterialDoesNotRevealUnderlyingContentBeforeTheMapCapture() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val settings = AppearanceSettings(context)
+        val previous = settings.appearance
+        try {
+            for (mode in listOf(Appearance.LIGHT, Appearance.DARK)) {
+                settings.appearance = mode
+                Ui.configure(context)
+                instrumentation.runOnMainSync {
+                    val host = View(context)
+                    val scene = GlassScene(host)
+                    val drawable = GlassDrawable(scene, host, 4f, .83f)
+                    drawable.setBounds(0, 0, 32, 32)
+                    val samples =
+                        listOf(Color.BLACK, Color.WHITE).map { color ->
+                            val bitmap = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+                            bitmap.eraseColor(color)
+                            drawable.draw(Canvas(bitmap))
+                            bitmap.getPixel(16, 16).also { bitmap.recycle() }
+                        }
+                    assertEquals(
+                        "Initial material must cover both bright and dark content",
+                        samples[0],
+                        samples[1],
+                    )
+                    scene.dispose()
+                }
+            }
+        } finally {
+            settings.appearance = previous
+            Ui.configure(context)
+        }
+    }
+
     @Test
     fun smallSecondaryTextRemainsReadableAtMaximumTransparency() {
         verify(Appearance.LIGHT, Color.rgb(2, 10, 20))

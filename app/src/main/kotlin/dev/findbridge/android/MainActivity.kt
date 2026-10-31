@@ -18,14 +18,12 @@ import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.RelativeLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.util.Consumer
@@ -369,6 +367,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         root.addView(controls, FrameLayout.LayoutParams(dp(44), -2, Gravity.TOP or Gravity.END))
         statusPill =
             label(getString(R.string.find_title), 14, Ui.ink, true).apply {
+                id = R.id.find_title
                 gravity = Gravity.CENTER
                 setPadding(dp(15), dp(9), dp(15), dp(9))
                 background = GlassDrawable(glass, this, dp(22).toFloat(), .22f)
@@ -429,133 +428,15 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun showMapSettings() {
-        val content = column().apply { setPadding(dp(22), dp(8), dp(22), dp(12)) }
-        content.addView(label(getString(R.string.map_view), 20, Ui.ink, true))
-        space(content, 14)
-        val modes = LinearLayout(this)
-        val buttons = mutableListOf<Button>()
-        MapMode.entries.forEach { mode ->
-            val button =
-                actionButton(getString(mode.titleRes), appearance.mapMode == mode).apply {
-                    textSize = 11f
-                    setSingleLine()
-                    ellipsize = TextUtils.TruncateAt.END
-                    setOnClickListener {
-                        appearance.mapMode = mode
-                        applyMapStyle()
-                        buttons.forEachIndexed { index, item ->
-                            val active = MapMode.entries[index] == mode
-                            item.setTextColor(if (active) Color.WHITE else Ui.ink)
-                            item.background =
-                                Ui.rounded(if (active) Ui.green else Ui.surface, dp(16))
-                        }
-                    }
-                }
-            buttons += button
-            modes.addView(
-                button,
-                LinearLayout.LayoutParams(0, dp(58), 1f).apply { rightMargin = dp(5) },
+        DisplaySettings(
+                this,
+                appearance,
+                glass,
+                onMapChanged = ::applyMapStyle,
+                present = { presentPanel(it, mapButton) },
+                close = { panel?.dismiss(immediate = true) },
             )
-        }
-        content.addView(modes)
-        space(content, 18)
-        content.addView(label(getString(R.string.appearance), 16, Ui.ink, true))
-        space(content, 6)
-        val theme = actionButton(getString(appearance.appearance.titleRes), false)
-        content.addView(theme, LinearLayout.LayoutParams(-1, dp(48)))
-        theme.setOnClickListener { showAppearanceSettings() }
-        space(content, 14)
-        content.addView(label(getString(R.string.glass_intensity), 16, Ui.ink, true))
-        content.addView(
-            SeekBar(this).apply {
-                max = 100
-                progress = (appearance.glassIntensity * 100).toInt()
-                setOnSeekBarChangeListener(
-                    object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(
-                            seekBar: SeekBar?,
-                            progress: Int,
-                            fromUser: Boolean,
-                        ) {
-                            if (fromUser) {
-                                appearance.glassIntensity = progress / 100f
-                                glass.intensity = appearance.glassIntensity
-                                glass.invalidate()
-                            }
-                        }
-
-                        override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-
-                        override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-                    }
-                )
-            },
-            LinearLayout.LayoutParams(-1, dp(44)),
-        )
-        content.addView(label(getString(R.string.imagery_help), 11, Ui.muted))
-        space(content, 14)
-        content.addView(
-            materialSwitch().apply {
-                text = getString(R.string.reduce_motion)
-                textSize = 15f
-                setTextColor(Ui.ink)
-                isChecked = appearance.reduceMotion
-                setOnCheckedChangeListener { _, checked -> appearance.reduceMotion = checked }
-            },
-            LinearLayout.LayoutParams(-1, dp(48)),
-        )
-        content.addView(label(getString(R.string.motion_help), 11, Ui.muted))
-        space(content, 14)
-        content.addView(label(getString(R.string.language), 16, Ui.ink, true))
-        content.addView(
-            actionButton(AppLanguage.label(this), false).apply {
-                setOnClickListener { showLanguageSettings() }
-            },
-            LinearLayout.LayoutParams(-1, dp(48)),
-        )
-        presentPanel(content, mapButton)
-    }
-
-    private fun showLanguageSettings() {
-        val content = column().apply { setPadding(dp(22), dp(12), dp(22), dp(12)) }
-        content.addView(label(getString(R.string.language), 22, Ui.ink, true))
-        space(content, 14)
-        AppLanguage.choices.forEach { (tag, name) ->
-            content.addView(
-                actionButton(
-                        if (tag.isEmpty()) getString(R.string.system) else name,
-                        tag == AppLanguage.selected(this),
-                    )
-                    .apply {
-                        setOnClickListener {
-                            panel?.dismiss(immediate = true)
-                            AppLanguage.select(this@MainActivity, tag)
-                        }
-                    },
-                LinearLayout.LayoutParams(-1, dp(48)),
-            )
-            space(content, 6)
-        }
-        presentPanel(content, mapButton)
-    }
-
-    private fun showAppearanceSettings() {
-        val content = column().apply { setPadding(dp(22), dp(12), dp(22), dp(12)) }
-        content.addView(label(getString(R.string.appearance), 22, Ui.ink, true))
-        space(content, 16)
-        Appearance.entries.forEach { choice ->
-            content.addView(
-                actionButton(getString(choice.titleRes), appearance.appearance == choice).apply {
-                    setOnClickListener {
-                        appearance.appearance = choice
-                        recreate()
-                    }
-                },
-                LinearLayout.LayoutParams(-1, dp(50)),
-            )
-            space(content, 8)
-        }
-        presentPanel(content, mapButton)
+            .show()
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -1174,7 +1055,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
         )
         row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(15) })
         row.addView(
-            label("›", 22, Ui.muted).apply { gravity = Gravity.CENTER },
+            SettingsAccessory(this).apply {
+                id = R.id.device_disclosure
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            },
             LinearLayout.LayoutParams(dp(16), dp(48)).apply { leftMargin = dp(10) },
         )
         row.contentDescription =
@@ -1199,7 +1083,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
             LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(12) },
         )
         header.addView(
-            roundButton("×", getString(R.string.back_to_list)).apply {
+            roundButton("", getString(R.string.back_to_list)).apply {
+                symbol = RefreshButton.Symbol.CLOSE
                 elevation = 0f
                 setTextColor(Ui.muted)
                 setOnClickListener {
@@ -1976,12 +1861,6 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onChanged() {
-        statusPill.text =
-            if (repository.loading || google.loading || locationSync.loading)
-                getString(R.string.updating)
-            else if (repository.hasSession || google.connected || locationSync.configured)
-                getString(R.string.find_title)
-            else "Find Bridge"
         if (pageMotion.running) pendingRender = true else renderSheet()
         renderMarkers()
         fitDevices()

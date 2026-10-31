@@ -36,6 +36,7 @@ class MapCameraTest {
         val loaded = CountDownLatch(1)
         val listener = AppleRepository.Listener { if (!sync.loading) loaded.countDown() }
         fun find(view: View, text: String): View? {
+            if (view.isClickable && view.contentDescription?.toString() == text) return view
             if (view is TextView && view.text.toString() == text) return view
             if (view is ViewGroup)
                 for (index in 0 until view.childCount) find(view.getChildAt(index), text)?.let {
