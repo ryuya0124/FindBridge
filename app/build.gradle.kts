@@ -13,8 +13,8 @@ android {
         applicationId = "dev.findbridge.android"
         minSdk = 28
         targetSdk = 37
-        versionCode = 16
-        versionName = "3.3.0-rc9"
+        versionCode = providers.gradleProperty("findbridgeVersionCode").orNull?.toInt() ?: 17
+        versionName = providers.gradleProperty("findbridgeVersionName").orNull ?: "3.3.0-rc10"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += "arm64-v8a"

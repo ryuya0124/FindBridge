@@ -40,6 +40,9 @@ import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
 import dev.findbridge.android.Ui.materialSwitch
 import dev.findbridge.android.Ui.space
+import dev.findbridge.android.update.UpdateActivity
+import dev.findbridge.android.update.UpdateRepository
+import dev.findbridge.android.update.UpdateScheduler
 import org.maplibre.android.MapLibre
 import org.maplibre.android.annotations.Icon
 import org.maplibre.android.annotations.IconFactory
@@ -56,6 +59,9 @@ import org.maplibre.android.maps.Style
 /** Every primary screen is drawn with native Android views and MapLibre's native renderer. */
 class MainActivity : Activity(), AppleRepository.Listener {
     private var googleCommandOpening = false
+    private val updateChanged: () -> Unit = {
+        if (accountTab && !pageMotion.running) renderSheet()
+    }
 
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
@@ -1605,6 +1611,16 @@ class MainActivity : Activity(), AppleRepository.Listener {
             },
             LinearLayout.LayoutParams(-1, dp(48)),
         )
+        space(content, 10)
+        content.addView(
+            SettingsRow(
+                this,
+                getString(R.string.updates_title),
+                UpdateRepository.get(this).state.release?.version,
+            ) {
+                startActivity(Intent(this, UpdateActivity::class.java))
+            }
+        )
         space(content, 16)
         content.addView(
             label(getString(R.string.app_version, BuildConfig.VERSION_NAME), 12, Ui.muted).apply {
@@ -2116,6 +2132,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         inlineAuthentication?.flow?.onStart()
         frameRate.start()
         DeviceImages.addListener(deviceImageListener)
+        UpdateRepository.get(this).addListener(updateChanged)
         windowAdapter =
             WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this)).also {
                 it.addWindowLayoutInfoListener(this, mainExecutor, foldListener)
@@ -2126,6 +2143,9 @@ class MainActivity : Activity(), AppleRepository.Listener {
         super.onResume()
         glass.setActive(true)
         foreground = true
+        UpdateScheduler.configure(this)
+        UpdateRepository.get(this).resume()
+        UpdateRepository.get(this).launched()
         inlineAuthentication?.flow?.onResume()
         google.setForeground(true)
         mapView.onResume()
@@ -2156,6 +2176,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
     override fun onStop() {
         inlineAuthentication?.flow?.onStop()
         DeviceImages.removeListener(deviceImageListener)
+        UpdateRepository.get(this).removeListener(updateChanged)
+        UpdateScheduler.whenIdle(this)
         frameRate.stop()
         windowAdapter?.removeWindowLayoutInfoListener(foldListener)
         windowAdapter = null
