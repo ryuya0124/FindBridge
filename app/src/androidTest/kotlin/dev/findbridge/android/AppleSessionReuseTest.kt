@@ -150,7 +150,16 @@ class AppleSessionReuseTest {
             vault.save(SavedLogin("fixture@example.invalid", "public-fixture-password"), true)
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 scenario.onActivity { activity ->
-                    AppleConnectionController(activity, repository, vault) { true }.reconnect()
+                    AppleConnectionController(
+                            activity,
+                            repository,
+                            vault,
+                            foreground = { true },
+                            startAuthentication = {
+                                fail("A valid session must not start authentication")
+                            },
+                        )
+                        .reconnect()
                     assertTrue(repository.hasSession)
                     assertTrue(
                         CookieManager.getInstance()
