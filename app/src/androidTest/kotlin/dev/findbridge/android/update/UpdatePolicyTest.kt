@@ -158,13 +158,15 @@ class UpdatePolicyTest {
                 scenario.onActivity { activity ->
                     fun select(id: Int, index: Int) {
                         activity.findViewById<android.view.View>(id).performClick()
-                        val dialog =
-                            UpdateActivity::class
-                                .java
-                                .getDeclaredField("selection")
-                                .apply { isAccessible = true }
-                                .get(activity) as android.app.AlertDialog
-                        dialog.listView.performItemClick(null, index, index.toLong())
+                        val rows =
+                            android.view.inspector.WindowInspector.getGlobalWindowViews()
+                                .firstNotNullOfOrNull {
+                                    it.findViewById<android.widget.LinearLayout>(
+                                        dev.findbridge.android.R.id.display_choices
+                                    )
+                                }
+                        assertNotNull("Update choices must use the shared glass menu", rows)
+                        rows!!.getChildAt(index).performClick()
                     }
                     val jobs = context.getSystemService(JobScheduler::class.java)
                     select(UpdateActivity.FREQUENCY_ID, 1)

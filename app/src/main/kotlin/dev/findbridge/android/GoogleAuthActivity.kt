@@ -9,7 +9,6 @@ import android.view.Gravity
 import android.view.WindowInsets
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
@@ -18,6 +17,7 @@ import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
+import dev.findbridge.android.MaterialControls.circularIndicator
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
@@ -88,7 +88,7 @@ class GoogleAuthActivity : Activity() {
 
     private fun loading() {
         body.removeAllViews()
-        body.addView(ProgressBar(this))
+        body.addView(circularIndicator())
         body.addView(
             label(getString(R.string.google_gms_connecting), 18, Ui.ink).apply {
                 id = STATUS_ID

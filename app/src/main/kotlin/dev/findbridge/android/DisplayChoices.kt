@@ -11,8 +11,11 @@ internal class DisplayChoices(
     private val activity: Activity,
     scene: GlassScene,
     paneBounds: () -> Rect,
+    dismissed: () -> Unit = {},
 ) {
-    private val popup = GlassPopup(activity, scene, paneBounds)
+    private val popup = GlassPopup(activity, scene, paneBounds, dismissed)
+    val isShowing
+        get() = popup.isShowing
 
     fun show(anchor: View, values: List<Pair<String, Boolean>>, selected: (Int) -> Unit) {
         val rows =
@@ -24,9 +27,13 @@ internal class DisplayChoices(
         values.forEachIndexed { index, (title, checked) ->
             rows.addView(
                 SettingsRow(activity, title, checked = checked) {
-                    dismiss()
-                    selected(index)
-                },
+                        dismiss()
+                        selected(index)
+                    }
+                    .apply {
+                        // The menu has one glass surface; rows only add their pressed ripple.
+                        background = Ui.ripple(android.graphics.Color.TRANSPARENT, activity.dp(15))
+                    },
                 LinearLayout.LayoutParams(-1, -2),
             )
         }

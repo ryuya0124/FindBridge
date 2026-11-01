@@ -9,7 +9,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.View
+import android.view.inspector.WindowInspector
 import android.widget.CompoundButton
+import android.widget.LinearLayout
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.security.MessageDigest
@@ -22,6 +24,13 @@ import org.junit.Test
 /** Opt-in, empty emulator only. The future APK is local, signed with the same test target key. */
 @android.annotation.SuppressLint("ResourceType")
 class ReleaseUpdateFixtureTest {
+    private val futureVersion
+        get() = InstrumentationRegistry.getArguments().getString("fixtureVersionName") ?: "3.3.1"
+
+    private val futureCode
+        get() =
+            InstrumentationRegistry.getArguments().getString("fixtureVersionCode")?.toLong() ?: 19L
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs
@@ -105,7 +114,7 @@ class ReleaseUpdateFixtureTest {
     fun updatedPackagePreservesDataAndClearsTheOldUpdate() {
         @Suppress("DEPRECATION")
         val version = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
-        assertEquals(18L, version)
+        assertEquals(futureCode, version)
         assertEquals(
             "retained-through-update",
             context.getSharedPreferences("update_fixture_marker", 0).getString("marker", null),
@@ -143,16 +152,65 @@ class ReleaseUpdateFixtureTest {
             }
             await { prefs.getString("phase", "") != "CHECKING" }
             instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                activity.findViewById<View>(FREQUENCY).performClick()
+            }
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                val menu = choices()
+                assertEquals(4, menu.childCount)
+                assertEquals(
+                    1,
+                    (0 until menu.childCount).count {
+                        menu.getChildAt(it).createAccessibilityNodeInfo().isChecked
+                    },
+                )
+            }
+            // Wait for the popup's first layout and fade to reach the compositor before capture.
+            await {
+                var visible = false
+                instrumentation.runOnMainSync {
+                    val menu = choices()
+                    visible =
+                        menu.width > 0 &&
+                            menu.isShown &&
+                            generateSequence(menu as View) { it.parent as? View }
+                                .all {
+                                    it.alpha >= .99f
+                                }
+                }
+                visible
+            }
             instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
                 File(context.getExternalFilesDir(null), "update-settings.png").outputStream().use {
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
                 }
                 bitmap.recycle()
             }
+            instrumentation.runOnMainSync { choices().getChildAt(3).performClick() }
+            instrumentation.waitForIdleSync()
+            assertEquals(24, prefs.getInt("intervalHours", -1))
+            instrumentation.runOnMainSync {
+                activity.findViewById<View>(PREVIEWS).performClick()
+            }
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                assertEquals(2, choices().childCount)
+                choices().getChildAt(0).performClick()
+            }
+            assertFalse(prefs.getBoolean("previews", true))
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
             appearance.edit().putString("theme", previousTheme).commit()
         }
+    }
+
+    private fun choices(): LinearLayout {
+        val id = context.resources.getIdentifier("display_choices", "id", context.packageName)
+        assertNotEquals(0, id)
+        return WindowInspector.getGlobalWindowViews().firstNotNullOfOrNull {
+            it.findViewById<LinearLayout>(id)
+        } ?: error("No glass choice menu in the signed release")
     }
 
     private fun stage(name: String, badDigest: Boolean = false) {
@@ -172,10 +230,10 @@ class ReleaseUpdateFixtureTest {
                 }
         val release =
             JSONObject()
-                .put("version", "3.3.0-rc11")
+                .put("version", futureVersion)
                 .put(
                     "url",
-                    "https://github.com/ryuya0124/FindBridge/releases/download/v3.3.0-rc11/FindBridge-3.3.0-rc11-arm64-release.apk",
+                    "https://github.com/ryuya0124/FindBridge/releases/download/v$futureVersion/FindBridge-$futureVersion-arm64-release.apk",
                 )
                 .put("sha256", digest)
                 .put("size", source.length())
@@ -216,6 +274,7 @@ class ReleaseUpdateFixtureTest {
     companion object {
         private const val AUTOMATIC = 0x16fb0211
         private const val PREVIEWS = 0x16fb0212
+        private const val FREQUENCY = 0x16fb0216
         private const val INSTALL = 0x16fb0213
         private const val CHECK_JOB = 0x16fb0201
         private const val INSTALL_JOB = 0x16fb0202

@@ -2,7 +2,6 @@ package dev.findbridge.android.update
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,14 +14,14 @@ import android.view.View
 import android.view.WindowInsets
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import dev.findbridge.android.*
+import dev.findbridge.android.MaterialControls.linearIndicator
+import dev.findbridge.android.MaterialControls.materialSwitch
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
-import dev.findbridge.android.Ui.materialSwitch
 import dev.findbridge.android.Ui.space
 
 /** Native update controls; the platform owns permission approval and package installation. */
@@ -36,12 +35,14 @@ class UpdateActivity : Activity() {
     private var resumed = false
     private var awaitingPermission = false
     private var confirmation: Intent? = null
-    private var selection: AlertDialog? = null
+    private lateinit var selection: DisplayChoices
+    private lateinit var glass: GlassScene
+    private var pendingRender = false
     private var posture: PostureObserver? = null
     private var fold: FoldRegion? = null
     private var layoutPane: () -> Unit = {}
     private val changed: () -> Unit = {
-        render()
+        if (::selection.isInitialized && selection.isShowing) pendingRender = true else render()
         showConfirmation()
     }
 
@@ -58,6 +59,17 @@ class UpdateActivity : Activity() {
         val scroll = ScrollView(this).apply { isFillViewport = true }
         content = column().apply { setPadding(dp(24), dp(16), dp(24), dp(28)) }
         scroll.addView(content)
+        glass = GlassScene(root)
+        selection =
+            DisplayChoices(
+                this,
+                glass,
+                { android.graphics.Rect().also(scroll::getGlobalVisibleRect) },
+            ) {
+                content.post {
+                    if (!isDestroyed && pendingRender && !selection.isShowing) render()
+                }
+            }
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
         root.setOnApplyWindowInsetsListener { view, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
@@ -68,13 +80,17 @@ class UpdateActivity : Activity() {
             insets
         }
         layoutPane = { PostureObserver.placeInPane(root, scroll, fold) }
-        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> layoutPane() }
+        root.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
+            if (r - l != or - ol || b - t != ob - ot) selection.dismiss()
+            layoutPane()
+        }
         setContentView(root)
         render()
     }
 
     private fun render() {
         if (!::content.isInitialized) return
+        pendingRender = false
         content.removeAllViews()
         content.addView(
             label(getString(R.string.update_back), 16, Ui.blue).apply {
@@ -125,9 +141,8 @@ class UpdateActivity : Activity() {
                 )
         if (busy)
             card.addView(
-                ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                linearIndicator().apply {
                     isIndeterminate = true
-                    indeterminateDrawable = SignInProgressDrawable(this@UpdateActivity)
                 },
                 LinearLayout.LayoutParams(-1, dp(4)).apply { topMargin = dp(16) },
             )
@@ -205,20 +220,15 @@ class UpdateActivity : Activity() {
                     getString(R.string.update_frequency),
                     intervalTitles[intervals.indexOf(updates.intervalHours)],
                 ) {
-                    selection?.dismiss()
-                    selection =
-                        AlertDialog.Builder(this)
-                            .setTitle(R.string.update_frequency)
-                            .setSingleChoiceItems(
-                                intervalTitles.toTypedArray(),
-                                intervals.indexOf(updates.intervalHours),
-                            ) { dialog, index ->
-                                updates.setInterval(intervals[index])
-                                dialog.dismiss()
-                                render()
-                            }
-                            .setNegativeButton(R.string.cancel, null)
-                            .show()
+                    selection.show(
+                        it,
+                        intervalTitles.mapIndexed { index, title ->
+                            title to (intervals[index] == updates.intervalHours)
+                        },
+                    ) { index ->
+                        updates.setInterval(intervals[index])
+                        render()
+                    }
                 }
                 .apply { id = FREQUENCY_ID }
         )
@@ -234,19 +244,15 @@ class UpdateActivity : Activity() {
                     getString(R.string.update_channel),
                     channels[if (updates.previews) 1 else 0],
                 ) {
-                    selection?.dismiss()
-                    selection =
-                        AlertDialog.Builder(this)
-                            .setTitle(R.string.update_channel)
-                            .setSingleChoiceItems(channels, if (updates.previews) 1 else 0) {
-                                dialog,
-                                index ->
-                                updates.setPreviews(index == 1)
-                                dialog.dismiss()
-                                render()
-                            }
-                            .setNegativeButton(R.string.cancel, null)
-                            .show()
+                    selection.show(
+                        it,
+                        channels.mapIndexed { index, title ->
+                            title to (index == if (updates.previews) 1 else 0)
+                        },
+                    ) { index ->
+                        updates.setPreviews(index == 1)
+                        render()
+                    }
                 }
                 .apply { id = PREVIEWS_ID }
         )
@@ -327,6 +333,7 @@ class UpdateActivity : Activity() {
         updates.addListener(changed)
         posture =
             PostureObserver(this) {
+                    selection.dismiss()
                     fold = it
                     layoutPane()
                 }
@@ -335,6 +342,7 @@ class UpdateActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        glass.setActive(true)
         resumed = true
         updates.resume()
         render()
@@ -352,10 +360,12 @@ class UpdateActivity : Activity() {
 
     override fun onPause() {
         resumed = false
+        glass.setActive(false)
         super.onPause()
     }
 
     override fun onStop() {
+        selection.dismiss()
         updates.removeListener(changed)
         posture?.stop()
         posture = null
@@ -373,7 +383,8 @@ class UpdateActivity : Activity() {
     }
 
     override fun onDestroy() {
-        selection?.dismiss()
+        selection.dismiss()
+        glass.dispose()
         super.onDestroy()
     }
 

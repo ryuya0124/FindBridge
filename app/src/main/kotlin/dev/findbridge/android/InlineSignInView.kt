@@ -5,7 +5,7 @@ import android.graphics.Color
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.ProgressBar
+import dev.findbridge.android.MaterialControls.linearIndicator
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
@@ -67,10 +67,9 @@ internal class InlineSignInView(
         addView(heading, LayoutParams(-1, -2))
         if (working) {
             addView(
-                ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
+                activity.linearIndicator().apply {
                     id = PROGRESS_ID
                     isIndeterminate = true
-                    indeterminateDrawable = SignInProgressDrawable(activity)
                     importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
                 },
                 LayoutParams(-1, activity.dp(4)).apply { topMargin = activity.dp(12) },

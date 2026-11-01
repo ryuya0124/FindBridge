@@ -24,12 +24,13 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import dev.findbridge.android.MaterialControls.circularIndicator
+import dev.findbridge.android.MaterialControls.linearIndicator
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
@@ -64,7 +65,7 @@ internal class AppleAuthFlow(
     lateinit var webView: WebView
         private set
 
-    private val progress: ProgressBar
+    private val progress: com.google.android.material.progressindicator.LinearProgressIndicator
     private val origin: TextView
     private val errorView: LinearLayout
     private lateinit var automaticStatus: LinearLayout
@@ -147,8 +148,8 @@ internal class AppleAuthFlow(
             LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)),
         )
         root.addView(header)
-        progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal)
-        root.addView(progress, LinearLayout.LayoutParams(-1, activity.dp(2)))
+        progress = activity.linearIndicator(indeterminate = false)
+        root.addView(progress, LinearLayout.LayoutParams(-1, activity.dp(4)))
         val frame = FrameLayout(activity)
         root.addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
         webView = WebView(activity).apply { isSaveEnabled = false }
@@ -166,7 +167,7 @@ internal class AppleAuthFlow(
                 isFocusable = true
                 accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
                 addView(
-                    ProgressBar(activity),
+                    activity.circularIndicator(),
                     LinearLayout.LayoutParams(activity.dp(36), activity.dp(36)),
                 )
                 addView(
