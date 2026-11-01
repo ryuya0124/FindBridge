@@ -269,3 +269,18 @@ GoogleではGMSの本人情報確認後、ネイティブ画面の「Find Hubへ
 ## 重なったウィンドウの暗転
 
 `OverlayDimming` はライト40%・ダーク45%（rc8以降）の暗転量を共通化します。`GlassPanel` は前面のガラスより下にあるscrimへ適用し、既存の180msの表示・150msの解除を維持します。`GlassPopup` は表示後の自身のウィンドウへ [FLAG_DIM_BEHINDとdimAmount](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_DIM_BEHIND) を設定し、親パネルを含む背後の画面を暗くします。ポップアップを破棄すると、その暗転もOSが解除します。ガラスの材質・ぼかし・画像の取得経路は変更しません。
+
+## アプリ内更新
+
+`update/` に更新処理をまとめています。追加SDKは使わず、JobScheduler、DownloadManager、PackageInstallerを使用します。`UpdateRepository` はアプリのApplicationコンテキストを保持し、ファイル・ネットワーク処理を直列ワーカーで行います。完了放送とライフサイクルで状態を復元し、ダウンロードの進捗をループで問い合わせません。
+
+- JobSchedulerの定期ジョブは6・12・24時間と1時間のflexで、再起動後も維持します。起動時のみでは定期ジョブを削除し、プロセス内の初回起動で確認します。定期実行時刻はOSの制約に従います。設定変更で既存ジョブの間隔を更新します。
+- プレビューを含むチャンネルは公開リリース一覧、安定版のみは `/releases/latest` を取得します。チャンネルごとにETagと本文をキャッシュし、未公開・欠損digest・異なる配布先・想定外のAPK名・50MiB超のファイルを除外します。バージョンは数値で比較し、rc9→rc10やプレビュー→安定版を扱います。
+- DownloadManagerは自動ダウンロードをWi-Fi／非従量課金に制限します。手動ダウンロードではモバイル回線も使用できます。完了後は共有ファイルを内部領域へコピーし、GitHubのSHA-256・長さ・package・versionName・増加したversionCode・minSdk・インストール済み署名の一致を確認します。インストール直前にも検証します。外部へ資格情報や端末の位置を送信しません。
+- Android 12以降の自分自身の更新には `UPDATE_PACKAGES_WITHOUT_USER_ACTION` と `USER_ACTION_NOT_REQUIRED` を使います。すべての同一UIDプロセスが画面に表示されていないことを確認し、Android 14以降で自分がinstaller of recordの場合はAppNotForeground／AppNotInteractingの制約付きでコミットします。ChromeやADBから入れた初回版では制約APIの利用権限がないため、同一UIDの画面表示をコミット直前にも確認して自己更新をコミットします。OSが `STATUS_PENDING_USER_ACTION` を返した場合は非公開Activityまたは通知のPendingIntentへ渡します。Android 9〜11と本人の「今すぐ更新」は確認が必要なコミットです。
+- インストール結果のReceiverは非公開で、永続化したsessionIdと照合します。公開のダウンロード完了Receiverは永続化した自分のdownloadIdだけを問い合わせ、放送のファイル名やURLを採用しません。キャンセルしたインストールは同じdigestについて自動で繰り返しません。新しい版または自動更新の再有効化で再開できます。
+- MY_PACKAGE_REPLACEDで古いAPKと更新状態を片付け、既存の認証・アプリ設定には触れません。正規署名を変える場合は、この厳密な署名照合にも変更が必要です。
+
+GitHubリリースには `FindBridge-VERSION-arm64-release.apk` をアップロードし、タグ `vVERSION` とAPKのversionNameを揃えてください。GitHubのasset digestが公開されてからクライアントが取得します。APK内のversionCodeも増加させます。開発用には `-PfindbridgeVersionCode=... -PfindbridgeVersionName=...` で上書きできます。
+
+参照: [PackageInstallerのユーザー確認条件](https://developer.android.com/reference/android/content/pm/PackageInstaller.SessionParams#setRequireUserAction(int))、[JobSchedulerの永続化](https://developer.android.com/reference/android/app/job/JobInfo.Builder#setPersisted(boolean))、[GitHubのリリースasset digest](https://docs.github.com/en/rest/releases/assets)。

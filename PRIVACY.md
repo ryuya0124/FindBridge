@@ -32,3 +32,7 @@ Find Bridge displays data from the Apple and Google accounts you connect, includ
 Optional saved Apple credentials and account/session records are encrypted locally with Android Keystore keys. Google account authorization uses GMS and only the `openid` and `userinfo.email` scopes. Google passwords, verification codes, and UserInfo access tokens are not saved by the app. Google's separate, app-private WebView profile retains its own cookies and site data; that cookie database is not encrypted with the app's Keystore keys.
 
 Requests go directly to the selected providers. Map providers receive the requested map area and your IP address. Lost Mode contact details and any required new lock code are sent to Apple only after your explicit final confirmation and are not persisted by the app. Disconnect accounts in the app, or clear app data, to remove local connection records. This does not remove devices from the providers or revoke Google permissions. Contact the project through GitHub Issues without posting private account or device data.
+
+## アプリの更新
+
+自動更新が有効な場合、設定した頻度と起動時にGitHubへ公開リリース情報を問い合わせます。更新確認の時刻、チャンネル、ダウンロードとインストールの状態はこの端末に保存します。更新取得先にApple・Googleの認証情報、確認コード、端末の位置、メールアドレスは送りません。GitHubとの通常の通信にIPアドレスなどの接続情報は含まれます。更新ファイルはAndroidのダウンロード機能で取得し、検証後にアプリ内の保存領域へ移します。自動更新はアプリの設定から停止できます。

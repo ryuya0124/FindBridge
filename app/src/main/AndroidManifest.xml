@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -14,6 +18,16 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FindBridge"
         android:usesCleartextTraffic="false">
+        <activity android:name=".update.UpdateActivity" android:exported="false" android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
+        <service android:name=".update.UpdateJobService" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <receiver android:name=".update.UpdateDownloadReceiver" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.DOWNLOAD_COMPLETE" /></intent-filter>
+        </receiver>
+        <receiver android:name=".update.UpdateInstallReceiver" android:exported="false" />
+        <receiver android:name=".update.UpdateReplacedReceiver" android:exported="false">
+            <intent-filter><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter>
+        </receiver>
         <provider android:name=".GoogleIdentityProvider" android:authorities="${applicationId}.googleidentity" android:exported="false" />
         <activity android:name=".GoogleAuthActivity" android:exported="false"
             android:windowSoftInputMode="adjustResize"
