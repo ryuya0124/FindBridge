@@ -31,6 +31,11 @@ class InlineProgressLayoutTest {
                 ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                     val laidOut = CountDownLatch(1)
                     scenario.onActivity { activity ->
+                        // Presentation-only fixtures must survive asynchronous empty-catalog
+                        // updates.
+                        AppleRepository.get(context).removeListener(activity)
+                        GoogleRepository.get(context).removeListener(activity)
+                        LocationSyncRepository.get(context).removeListener(activity)
                         val body =
                             MainActivity::class
                                 .java
@@ -64,6 +69,9 @@ class InlineProgressLayoutTest {
                             activity.window.attributes.flags and
                                 WindowManager.LayoutParams.FLAG_SECURE,
                         )
+                    }
+                    scenario.onActivity { activity ->
+                        assertNotNull(activity.findViewById<View>(InlineSignInView.STATUS_ID))
                     }
                     instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
                         File(

@@ -1,7 +1,6 @@
 package dev.findbridge.android
 
 import android.app.Activity
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.view.Gravity
 import android.view.View
@@ -71,8 +70,7 @@ internal class InlineSignInView(
                 ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
                     id = PROGRESS_ID
                     isIndeterminate = true
-                    indeterminateTintList = ColorStateList.valueOf(Ui.green)
-                    progressBackgroundTintList = ColorStateList.valueOf(Ui.separator)
+                    indeterminateDrawable = SignInProgressDrawable(activity)
                     importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
                 },
                 LayoutParams(-1, activity.dp(4)).apply { topMargin = activity.dp(12) },

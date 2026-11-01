@@ -351,6 +351,7 @@ class InlineAppleSignInTest {
             // is also intercepted; navigation in these tests never contacts Apple's servers.
             web.webViewClient = fixtureClient(web.webViewClient, html)
             val original = web.webViewClient
+            var initialNavigation = true
             web.webViewClient =
                 object : WebViewClient() {
                     override fun shouldInterceptRequest(
@@ -364,7 +365,10 @@ class InlineAppleSignInTest {
                         icon: android.graphics.Bitmap?,
                     ) {
                         original.onPageStarted(view, address, icon)
-                        if (address == UrlPolicy.findUrl && url != address) web.loadUrl(url)
+                        if (initialNavigation && address == UrlPolicy.findUrl && url != address) {
+                            initialNavigation = false
+                            web.loadUrl(url)
+                        }
                     }
 
                     override fun onPageFinished(view: WebView, address: String) {
