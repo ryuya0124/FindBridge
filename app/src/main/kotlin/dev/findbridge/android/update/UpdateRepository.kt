@@ -117,6 +117,8 @@ internal class UpdateRepository private constructor(private val context: android
             check(force = true)
         } else
             work {
+                if (state.phase == UpdatePhase.CHECKING)
+                    phase(if (state.release == null) UpdatePhase.IDLE else UpdatePhase.AVAILABLE)
                 if (prefs.getBoolean("automaticDownload", false)) cancelDownload()
                 if (prefs.getBoolean("automaticSession", false)) {
                     UpdateInstaller.abandon(context, this)

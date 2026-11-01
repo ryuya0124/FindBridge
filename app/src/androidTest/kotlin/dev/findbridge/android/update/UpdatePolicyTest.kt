@@ -134,6 +134,10 @@ class UpdatePolicyTest {
                     )
                 }
             }
+            val settled = java.util.concurrent.CountDownLatch(1)
+            repository.work { settled.countDown() }
+            assertTrue(settled.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            assertNotEquals(UpdatePhase.CHECKING, repository.state.phase)
         } finally {
             repository.setAutomatic(false)
             repository.prefs.edit().putBoolean("automatic", previous).apply()

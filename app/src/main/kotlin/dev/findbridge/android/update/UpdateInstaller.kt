@@ -70,7 +70,21 @@ internal object UpdateInstaller {
                     PendingIntent.FLAG_UPDATE_CURRENT or
                         if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
                 val result = PendingIntent.getBroadcast(context, id, intent, flags).intentSender
-                if (automatic && Build.VERSION.SDK_INT >= 34) {
+                if (automatic && !canInstallAutomatically(context)) {
+                    installer.abandonSession(id)
+                    repository.prefs.edit().remove("sessionId").apply()
+                    repository.phase(UpdatePhase.READY)
+                    return
+                }
+                // Constraint APIs are restricted to the installer of record. The first
+                // self-update may have been installed by Chrome or ADB; self-commit is
+                // separately supported and still subject to Android's user-action checks.
+                val ownsInstall =
+                    Build.VERSION.SDK_INT >= 34 &&
+                        context.packageManager
+                            .getInstallSourceInfo(context.packageName)
+                            .installingPackageName == context.packageName
+                if (automatic && Build.VERSION.SDK_INT >= 34 && ownsInstall) {
                     installer.commitSessionAfterInstallConstraintsAreMet(
                         id,
                         result,

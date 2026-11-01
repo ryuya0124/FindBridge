@@ -123,6 +123,11 @@ class ReleaseUpdateFixtureTest {
             .putBoolean("previews", false)
             .putString("phase", "CURRENT")
             .commit()
+        val appearance = context.getSharedPreferences("appearance", 0)
+        val previousTheme = appearance.getString("theme", "SYSTEM")
+        InstrumentationRegistry.getArguments().getString("fixtureTheme")?.let {
+            appearance.edit().putString("theme", it).commit()
+        }
         val activity = launch()
         try {
             instrumentation.runOnMainSync {
@@ -136,6 +141,7 @@ class ReleaseUpdateFixtureTest {
                 activity.findViewById<CompoundButton>(AUTOMATIC).performClick()
                 assertFalse(prefs.getBoolean("automatic", true))
             }
+            await { prefs.getString("phase", "") != "CHECKING" }
             instrumentation.waitForIdleSync()
             instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
                 File(context.getExternalFilesDir(null), "update-settings.png").outputStream().use {
@@ -145,6 +151,7 @@ class ReleaseUpdateFixtureTest {
             }
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
+            appearance.edit().putString("theme", previousTheme).commit()
         }
     }
 
