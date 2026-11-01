@@ -4,7 +4,6 @@ package dev.findbridge.android
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.res.Configuration
@@ -34,11 +33,12 @@ import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import dev.findbridge.android.MaterialControls.materialSwitch
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
-import dev.findbridge.android.Ui.materialSwitch
 import dev.findbridge.android.Ui.space
 import dev.findbridge.android.update.UpdateActivity
 import dev.findbridge.android.update.UpdateRepository
@@ -455,7 +455,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 background =
                     Ui.rounded(if (Ui.dark) 0xc51c1c1e.toInt() else 0xdaffffff.toInt(), dp(5))
                 setOnClickListener {
-                    AlertDialog.Builder(this@MainActivity)
+                    MaterialAlertDialogBuilder(this@MainActivity)
                         .setTitle(getString(R.string.map_credits))
                         .setMessage(getString(R.string.map_credits_body))
                         .setPositiveButton(getString(R.string.close), null)
@@ -1625,7 +1625,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         content.addView(
             label(getString(R.string.app_version, BuildConfig.VERSION_NAME), 12, Ui.muted).apply {
                 setOnClickListener {
-                    AlertDialog.Builder(this@MainActivity)
+                    MaterialAlertDialogBuilder(this@MainActivity)
                         .setTitle("Find Bridge")
                         .setMessage(getString(R.string.about_description))
                         .setPositiveButton(getString(R.string.close), null)
@@ -1753,7 +1753,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun confirmLogout() {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.confirm_sign_out))
             .setMessage(getString(R.string.sign_out_help))
             .setNegativeButton(getString(R.string.cancel), null)

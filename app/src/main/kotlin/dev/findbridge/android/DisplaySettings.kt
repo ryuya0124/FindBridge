@@ -2,11 +2,11 @@ package dev.findbridge.android
 
 import android.app.Activity
 import android.widget.LinearLayout
-import android.widget.SeekBar
+import dev.findbridge.android.MaterialControls.materialSlider
+import dev.findbridge.android.MaterialControls.materialSwitch
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
-import dev.findbridge.android.Ui.materialSwitch
 import dev.findbridge.android.Ui.space
 
 /** Builds the native display panels separately from the map and device screen. */
@@ -71,31 +71,18 @@ internal class DisplaySettings(
         )
         section(content, R.string.glass_intensity)
         content.addView(
-            SeekBar(activity).apply {
+            activity.materialSlider().apply {
                 contentDescription = activity.getString(R.string.glass_intensity)
-                max = 100
-                progress = (settings.glassIntensity * 100).toInt()
-                setOnSeekBarChangeListener(
-                    object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(
-                            seekBar: SeekBar?,
-                            progress: Int,
-                            fromUser: Boolean,
-                        ) {
-                            if (fromUser) {
-                                settings.glassIntensity = progress / 100f
-                                scene.intensity = settings.glassIntensity
-                                scene.invalidate()
-                            }
-                        }
-
-                        override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-
-                        override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+                value = (settings.glassIntensity * 100).toInt().toFloat()
+                addOnChangeListener { _, value, fromUser ->
+                    if (fromUser) {
+                        settings.glassIntensity = value / 100f
+                        scene.intensity = settings.glassIntensity
+                        scene.invalidate()
                     }
-                )
+                }
             },
-            LinearLayout.LayoutParams(-1, activity.dp(44)),
+            LinearLayout.LayoutParams(-1, activity.dp(48)),
         )
         content.addView(
             activity.label(activity.getString(R.string.blur_help), 11, Ui.muted).apply {

@@ -19,6 +19,9 @@ class UpdateDownloadTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assertFalse(LoginVault(context).hasSaved)
         val repository = UpdateRepository.get(context)
+        // Use the public control path so a preceding activity's queued metadata check cannot
+        // overwrite this deliberately older release after the fixture has been staged.
+        repository.setAutomatic(false)
         val release =
             UpdateRelease(
                 "3.3.0-rc9",

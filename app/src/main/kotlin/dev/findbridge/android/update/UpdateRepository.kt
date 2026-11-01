@@ -283,14 +283,15 @@ internal class UpdateRepository private constructor(private val context: android
                                     val count = input.read(buffer)
                                     if (count < 0) break
                                     total += count
-                                    check(total <= release.size)
+                                    // Qualify the assertion: this class also has check(force).
+                                    kotlin.check(total <= release.size)
                                     output.write(buffer, 0, count)
                                 }
                             }
                         }
                     UpdateApkVerifier(context).verify(temporary, release)
                     apk.delete()
-                    check(temporary.renameTo(apk))
+                    kotlin.check(temporary.renameTo(apk))
                     apk.setReadOnly()
                     downloads.remove(id)
                     prefs.edit().remove("downloadId").apply()

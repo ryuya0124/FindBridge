@@ -15,12 +15,12 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import com.google.android.material.switchmaterial.SwitchMaterial
+import com.google.android.material.materialswitch.MaterialSwitch
+import dev.findbridge.android.MaterialControls.materialSwitch
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
 import dev.findbridge.android.Ui.label
-import dev.findbridge.android.Ui.materialSwitch
 import dev.findbridge.android.Ui.space
 import java.util.concurrent.Executors
 
@@ -35,8 +35,8 @@ class LoginActivity : Activity() {
     private lateinit var vault: LoginVault
     private lateinit var account: EditText
     private lateinit var password: EditText
-    private lateinit var remember: SwitchMaterial
-    private lateinit var automatic: SwitchMaterial
+    private lateinit var remember: MaterialSwitch
+    private lateinit var automatic: MaterialSwitch
     private lateinit var submit: TextView
     private var existing: SavedLogin? = null
     private val worker = Executors.newSingleThreadExecutor()

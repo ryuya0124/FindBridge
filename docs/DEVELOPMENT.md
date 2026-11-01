@@ -32,7 +32,7 @@ Apple接続の責務は次のファイルへ分けています。Kotlinはktfmt�
 | Android Gradle Plugin | 9.5.0 |
 | Gradle | 9.8.2 |
 | Android Build Tools | 37.0.0 |
-| Material Components（Material 2のSwitchMaterial） | 1.14.0 |
+| Material Components（Material 3 Expressive） | 1.14.0 |
 | MapLibre Native Android | 13.7.1 |
 | AndroidX WebKit | 1.18.0 |
 | AndroidX DynamicAnimation | 1.1.0 |
@@ -232,7 +232,11 @@ GitHub Actionsはdebug/releaseのビルド、Lint、単体テストを実行し�
 独立したR8検証用の `verification` は、通常ビルドではGMSライブラリを同梱しません。重複したGMSのmanifest公開クラスがinstrumentationのクラスローダーで製品側のクラスを置き換え、R8後の親クラスと不整合になるためです。読み取りテストは、表示中のMainActivityを終了させて単一クライアントでサービスを検証します。GMS SDK自体の診断が必要な場合だけ `-PincludeGmsProbe=true :verification:assembleDebug` を使います。このGMS用診断APKと、通常起動のR8製品UIの検証は分けてください。
 
 
-スイッチはMaterial Components 1.14.0の `SwitchMaterial` とM2の `Widget.MaterialComponents.CompoundButton.Switch` を使用します。`Ui.materialSwitch()` 内だけでライト／ダークのMaterialテーマをラップし、アプリの外観設定と緑色へ合わせます。ログイン情報保存・自動ログイン・動きを減らすの3か所へ適用し、主画面・タブ・シートのテーマやアニメーションは変更しません。
+標準の操作部品はMaterial Components 1.14.0のMaterial 3 Expressiveテーマを使います。`MaterialControls` に `MaterialSwitch`、`Slider`、`LinearProgressIndicator`、`CircularProgressIndicator` をまとめ、確認ダイアログは `MaterialAlertDialogBuilder` に統一します。M2のSwitchMaterialや、旧プラットフォームのAlertDialog・SeekBarを新しい画面へ混在させません。
+
+ガラスの選択メニュー・タブ・地図操作・独自ボタンなど、Apple風に描画する部品は独自デザインを維持します。選択メニューは更新頻度／チャンネル・外観・言語で同じ `DisplayChoices` / `GlassPopup` / `SettingsRow` を共有します。アクセシビリティのButton／RadioButtonという役割名は旧部品の描画を意味しません。Materialのスイッチなどを独自Apple風に見せかける変更も行いません。
+
+通常の配布は3.3.0から安定版のバージョンを使用し、修正はパッチ番号、機能追加は必要に応じてマイナー番号を上げます。既存rc版から更新できるよう、プレリリースの比較は更新クライアントに維持します。
 
 Googleの読み取りだけを単独プロセスで確認する場合は、`-PverificationTargetProcess=dev.findbridge.android:google :verification:assembleDebug` でドライバーをビルドします。同じ署名の製品APKをインストールし、`-e googleread true -e class dev.findbridge.verification.GoogleReadLiveTest` を指定します。MainActivityの表示中の更新とテストクライアントを競合させません。
 

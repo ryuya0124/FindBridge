@@ -1,7 +1,8 @@
 package dev.findbridge.android
 
 import android.app.Activity
-import android.app.AlertDialog
+import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /** The request callback runs only after the owner presses the explicit playback action. */
 internal object SoundConfirmation {
@@ -13,7 +14,7 @@ internal object SoundConfirmation {
         confirmed: () -> Unit,
     ): AlertDialog {
         var consumed = false
-        return AlertDialog.Builder(activity)
+        return MaterialAlertDialogBuilder(activity)
             .setTitle(if (stop) R.string.stop_sound else R.string.play_sound)
             .setMessage(
                 activity.getString(

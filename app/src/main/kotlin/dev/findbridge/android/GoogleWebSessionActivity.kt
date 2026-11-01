@@ -8,7 +8,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ProgressBar
+import dev.findbridge.android.MaterialControls.circularIndicator
 import dev.findbridge.android.Ui.actionButton
 import dev.findbridge.android.Ui.column
 import dev.findbridge.android.Ui.dp
@@ -98,7 +98,7 @@ class GoogleWebSessionActivity : Activity() {
                 setBackgroundColor(Ui.surface)
                 isClickable = true
                 isFocusable = true
-                addView(ProgressBar(this@GoogleWebSessionActivity))
+                addView(circularIndicator())
                 addView(
                     label(
                             getString(
@@ -205,7 +205,7 @@ class GoogleWebSessionActivity : Activity() {
         fun showLoading() {
             loading.visibility = View.VISIBLE
             loading.removeAllViews()
-            loading.addView(ProgressBar(this))
+            loading.addView(circularIndicator())
             loading.addView(
                 label(
                         getString(

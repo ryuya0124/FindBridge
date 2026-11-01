@@ -15,8 +15,11 @@ internal class GlassPopup(
     private val activity: Activity,
     private val scene: GlassScene,
     private val paneBounds: () -> Rect,
+    private val dismissed: () -> Unit = {},
 ) {
     private var popup: PopupWindow? = null
+    val isShowing
+        get() = popup?.isShowing == true
 
     fun show(anchor: View, content: View, preferredWidth: Int) {
         dismiss()
@@ -58,6 +61,7 @@ internal class GlassPopup(
                 setOnDismissListener {
                     NativeMotion.cancelTree(card)
                     popup = null
+                    dismissed()
                 }
                 // Keep the menu in its physical map pane, including tabletop folds.
                 val offset =

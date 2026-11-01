@@ -11,7 +11,7 @@ import android.widget.Button
 /** The activity indicator animates inside a fixed button, without rotating its glass surface. */
 @android.annotation.SuppressLint(
     "AppCompatCustomView"
-) // Platform-themed button; M2 is scoped to switches.
+) // Apple-style control with custom drawing and native button semantics.
 internal class RefreshButton(context: Context) : Button(context) {
     enum class Symbol {
         REFRESH,

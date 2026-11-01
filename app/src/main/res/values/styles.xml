@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.FindBridge" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.FindBridge" parent="Theme.Material3Expressive.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#28B14E</item>
         <item name="android:windowLightStatusBar">true</item>
@@ -8,30 +8,46 @@
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowBackground">#F2F2F7</item>
         <item name="android:windowSoftInputMode">adjustResize</item>
+        <item name="colorPrimary">#086B2B</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#C6F7CB</item>
+        <item name="colorOnPrimaryContainer">#002108</item>
+        <item name="colorSecondary">#0050AE</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        <item name="colorSurface">#FBFBFD</item>
+        <item name="colorSurfaceContainerLowest">#FFFFFF</item>
+        <item name="colorSurfaceContainerLow">#F2F2F7</item>
+        <item name="colorSurfaceContainer">#EBECEF</item>
+        <item name="colorSurfaceContainerHigh">#E5E5EA</item>
+        <item name="colorSurfaceContainerHighest">#D1D1D6</item>
+        <item name="colorOnSurface">#1C1C1E</item>
+        <item name="colorOnSurfaceVariant">#51515C</item>
+        <item name="colorOutline">#74747E</item>
+        <item name="colorOutlineVariant">#C4C4CC</item>
     </style>
-    <style name="Theme.FindBridge.Dark" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.FindBridge.Dark" parent="Theme.Material3Expressive.Dark.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#32D74B</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowBackground">#000000</item>
         <item name="android:windowSoftInputMode">adjustResize</item>
-    </style>
-    <style name="Theme.FindBridge.Material2Switch.Light" parent="Theme.MaterialComponents.Light.NoActionBar">
-        <item name="colorControlActivated">#28B14E</item>
-        <item name="colorSurface">#FBFBFD</item>
-        <item name="colorOnSurface">#1C1C1E</item>
-        <item name="switchStyle">@style/Widget.FindBridge.Material2Switch</item>
-    </style>
-    <style name="Theme.FindBridge.Material2Switch.Dark" parent="Theme.MaterialComponents.NoActionBar">
-        <item name="colorControlActivated">#32D74B</item>
+        <item name="colorPrimary">#32D74B</item>
+        <item name="colorOnPrimary">#00390E</item>
+        <item name="colorPrimaryContainer">#00531B</item>
+        <item name="colorOnPrimaryContainer">#C6F7CB</item>
+        <item name="colorSecondary">#0A84FF</item>
+        <item name="colorOnSecondary">#001C3B</item>
         <item name="colorSurface">#1C1C1E</item>
+        <item name="colorSurfaceContainerLowest">#000000</item>
+        <item name="colorSurfaceContainerLow">#1C1C1E</item>
+        <item name="colorSurfaceContainer">#242426</item>
+        <item name="colorSurfaceContainerHigh">#2C2C2E</item>
+        <item name="colorSurfaceContainerHighest">#3A3A3C</item>
         <item name="colorOnSurface">#F5F5F7</item>
-        <item name="switchStyle">@style/Widget.FindBridge.Material2Switch</item>
-    </style>
-    <style name="Widget.FindBridge.Material2Switch" parent="Widget.MaterialComponents.CompoundButton.Switch">
-        <item name="useMaterialThemeColors">true</item>
-        <item name="android:minHeight">48dp</item>
-        <item name="switchPadding">16dp</item>
+        <item name="colorOnSurfaceVariant">#A0A0A8</item>
+        <item name="colorOutline">#93939C</item>
+        <item name="colorOutlineVariant">#48484A</item>
     </style>
 </resources>
