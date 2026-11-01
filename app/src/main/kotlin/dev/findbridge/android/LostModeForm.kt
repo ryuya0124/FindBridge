@@ -4,7 +4,6 @@ import android.app.Activity
 import android.text.InputFilter
 import android.text.InputType
 import android.view.View
-import android.view.WindowManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import dev.findbridge.android.Ui.actionButton
@@ -43,7 +42,7 @@ internal class LostModeForm(
         )
     private var draft: LostModeDraft? = null
     private var committed = false
-    private var securedWindow = false
+    private var secureWindow: SecureWindowLease? = null
 
     init {
         orientation = VERTICAL
@@ -189,15 +188,14 @@ internal class LostModeForm(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        securedWindow =
-            activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE == 0
-        if (securedWindow) activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        secureWindow = SecureWindowLease.acquire(activity.window)
     }
 
     override fun onDetachedFromWindow() {
         draft = null
         for (input in listOf(phone, message, code, codeAgain)) input.text.clear()
-        if (securedWindow) activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        secureWindow?.close()
+        secureWindow = null
         super.onDetachedFromWindow()
     }
 

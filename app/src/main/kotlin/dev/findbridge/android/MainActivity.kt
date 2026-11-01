@@ -66,6 +66,13 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private lateinit var loginVault: LoginVault
     private var foreground = false
     private lateinit var appleConnection: AppleConnectionController
+    private var inlineAuthentication: InlineAppleAuthentication? = null
+    private var pendingInlineAuthentication = false
+    private var restoreOfficialAuthentication = false
+    private var restoredSignInError: AppleSignInState.Failed? = null
+    private val signInState: AppleSignInState?
+        get() = inlineAuthentication?.state ?: restoredSignInError
+
     private lateinit var locationSync: LocationSyncRepository
     private lateinit var appearance: AppearanceSettings
     private lateinit var glass: GlassScene
@@ -144,7 +151,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private val periodicRefresh =
         object : Runnable {
             override fun run() {
-                repository.refresh()
+                if (inlineAuthentication == null) repository.refresh()
                 google.refreshIfDue()
                 locationSync.refresh()
                 handler.postDelayed(this, 30_000)
@@ -166,7 +173,23 @@ class MainActivity : Activity(), AppleRepository.Listener {
         repository = AppleRepository.get(this)
         google = GoogleRepository.get(this)
         loginVault = LoginVault(this)
-        appleConnection = AppleConnectionController(this, repository, loginVault) { foreground }
+        appleConnection =
+            AppleConnectionController(
+                this,
+                repository,
+                loginVault,
+                foreground = { foreground },
+                startAuthentication = ::startInlineAuthentication,
+            )
+        pendingInlineAuthentication = savedInstanceState?.getBoolean("inlineSignInPending") == true
+        restoreOfficialAuthentication =
+            savedInstanceState?.getBoolean("inlineSignInOfficial") == true
+        savedInstanceState
+            ?.getIntArray("inlineSignInError")
+            ?.takeIf { it.size == 2 }
+            ?.let {
+                restoredSignInError = AppleSignInState.Failed(it[0], it[1])
+            }
         locationSync = LocationSyncRepository.get(this)
         root =
             FrameLayout(this).apply {
@@ -846,7 +869,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 id = REFRESH_ID
                 elevation = 0f
                 setTextColor(Ui.blue)
-                isEnabled = !repository.loading && !google.loading
+                isEnabled = !repository.loading && !google.loading && signInState == null
                 refreshing = repository.loading || google.loading
                 setOnClickListener {
                     repository.refresh()
@@ -861,7 +884,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             }
         header.addView(headerActions(refresh, more), LinearLayout.LayoutParams(dp(88), dp(44)))
         body.addView(header)
-        if (repository.error.isNotBlank())
+        if (repository.error.isNotBlank() && signInState == null)
             body.addView(
                 label(repository.error, 12, 0xffd87520.toInt()).apply {
                     setPadding(dp(22), 0, dp(22), dp(8))
@@ -877,7 +900,16 @@ class MainActivity : Activity(), AppleRepository.Listener {
                     setOnClickListener { connectGoogle() }
                 }
             )
-        if (!repository.hasSession && !google.connected && locationSync.pencils.isEmpty()) {
+        if (signInState != null && visibleDevices().isEmpty()) {
+            renderSignInStatus()
+            return
+        }
+        if (
+            signInState == null &&
+                !repository.hasSession &&
+                !google.connected &&
+                locationSync.pencils.isEmpty()
+        ) {
             renderSignIn()
             return
         }
@@ -899,6 +931,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         }
         val scroll = ScrollView(this)
         val list = column()
+        if (signInState != null) list.addView(signInView())
         scroll.addView(list)
         visibleDevices()
             .filterNot { it.family }
@@ -969,6 +1002,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
                 }
             )
         val entries = sharedEntries()
+        if (entries.isEmpty() && signInState != null) {
+            renderSignInStatus()
+            return
+        }
         if (entries.isEmpty()) {
             val scroll = ScrollView(this).apply { isFillViewport = true }
             val empty =
@@ -1020,6 +1057,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             )
         val scroll = ScrollView(this)
         val list = column()
+        if (signInState != null) list.addView(signInView())
         scroll.addView(list)
         entries
             .sortedWith(compareByDescending<SharedLocation> { it.located }.thenBy { it.name })
@@ -1480,17 +1518,19 @@ class MainActivity : Activity(), AppleRepository.Listener {
         space(content, 8)
         content.addView(label(getString(R.string.android_network_unavailable), 13, Ui.muted))
         space(content, 20)
-        content.addView(
-            actionButton(
-                    if (repository.hasSession) getString(R.string.reconnect_account)
-                    else getString(R.string.sign_in)
-                )
-                .apply {
-                    id = OPEN_FIND_ID
-                    setOnClickListener { connect() }
-                },
-            LinearLayout.LayoutParams(-1, dp(50)),
-        )
+        if (signInState != null) content.addView(signInView())
+        else
+            content.addView(
+                actionButton(
+                        if (repository.hasSession) getString(R.string.reconnect_account)
+                        else getString(R.string.sign_in)
+                    )
+                    .apply {
+                        id = OPEN_FIND_ID
+                        setOnClickListener { connect() }
+                    },
+                LinearLayout.LayoutParams(-1, dp(50)),
+            )
         space(content, 12)
         if (repository.hasSession)
             content.addView(
@@ -1502,6 +1542,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
         space(content, 10)
         content.addView(
             actionButton(getString(R.string.login_details), false).apply {
+                isEnabled = inlineAuthentication == null
                 minimumHeight = dp(48)
                 setOnClickListener { editLogin() }
             },
@@ -1615,8 +1656,80 @@ class MainActivity : Activity(), AppleRepository.Listener {
     private fun editLogin() = appleConnection.editCredentials()
 
     private fun maintainLogin() {
-        if (::appleConnection.isInitialized) appleConnection.maintain()
+        if (!::appleConnection.isInitialized || !foreground || !hasWindowFocus()) return
+        if (pendingInlineAuthentication) {
+            pendingInlineAuthentication = false
+            appleConnection.authenticatePrepared()
+        } else if (signInState == null) appleConnection.maintain()
     }
+
+    private fun startInlineAuthentication() {
+        if (inlineAuthentication != null || isFinishing || isDestroyed) return
+        restoredSignInError = null
+        accountActions.dismiss()
+        panel?.dismiss(immediate = true)
+        val automatic = !restoreOfficialAuthentication
+        restoreOfficialAuthentication = false
+        inlineAuthentication =
+            InlineAppleAuthentication(
+                this,
+                root,
+                automatic,
+                changed = {
+                    if (pageMotion.running) pendingRender = true else renderSheet()
+                },
+                finished = ::finishInlineAuthentication,
+            )
+        inlineAuthentication?.start()
+        renderSheet()
+    }
+
+    private fun finishInlineAuthentication(success: Boolean) {
+        if (!success) {
+            loginVault.pause()
+            LoginVault.clearStaged()
+        }
+        inlineAuthentication?.close()
+        inlineAuthentication = null
+        restoredSignInError = null
+        pendingInlineAuthentication = false
+        appleConnection.completed()
+        if (success) {
+            fitted = false
+            repository.refresh()
+        }
+        renderSheet()
+    }
+
+    private fun renderSignInStatus() {
+        val scroll = ScrollView(this)
+        scroll.addView(signInView())
+        body.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+    }
+
+    private fun signInView() =
+        InlineSignInView(
+            this,
+            signInState ?: AppleSignInState.Working,
+            canceled = { finishInlineAuthentication(false) },
+            retry = {
+                val authentication = inlineAuthentication
+                if (authentication != null) authentication.flow.retry()
+                else {
+                    restoredSignInError = null
+                    appleConnection.authenticatePrepared()
+                }
+            },
+            showOfficial = {
+                val authentication = inlineAuthentication
+                if (authentication != null) authentication.flow.revealOfficialPage()
+                else {
+                    restoredSignInError = null
+                    restoreOfficialAuthentication = true
+                    appleConnection.authenticatePrepared()
+                }
+            },
+        )
 
     private fun accountMenu(anchor: View) {
         displaySettings?.dismissChoices()
@@ -1629,6 +1742,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
             .setMessage(getString(R.string.sign_out_help))
             .setNegativeButton(getString(R.string.cancel), null)
             .setPositiveButton(getString(R.string.sign_out)) { _, _ ->
+                finishInlineAuthentication(false)
                 LoginVault.clearStaged()
                 loginVault.clear()
                 selectedId = null
@@ -1961,6 +2075,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
         }
         if (requestCode == 10) {
             appleConnection.completed()
+            if (resultCode == LoginActivity.RESULT_CREDENTIALS_READY) {
+                pendingInlineAuthentication = true
+                maintainLogin()
+            }
             if (resultCode == RESULT_OK) {
                 fitted = false
                 repository.refresh()
@@ -1979,6 +2097,10 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     private fun back() {
+        if (inlineAuthentication?.officialVisible == true) {
+            finishInlineAuthentication(false)
+            return
+        }
         if (panel != null) {
             panel?.dismiss()
             return
@@ -1991,6 +2113,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     override fun onStart() {
         super.onStart()
         mapView.onStart()
+        inlineAuthentication?.flow?.onStart()
         frameRate.start()
         DeviceImages.addListener(deviceImageListener)
         windowAdapter =
@@ -2003,20 +2126,23 @@ class MainActivity : Activity(), AppleRepository.Listener {
         super.onResume()
         glass.setActive(true)
         foreground = true
+        inlineAuthentication?.flow?.onResume()
         google.setForeground(true)
         mapView.onResume()
         onChanged()
-        repository.refresh()
+        if (inlineAuthentication == null && !pendingInlineAuthentication) repository.refresh()
         locationSync.refresh()
         handler.postDelayed(periodicRefresh, 30_000)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        inlineAuthentication?.flow?.onWindowFocusChanged(hasFocus)
         if (hasFocus && ::loginVault.isInitialized) maintainLogin()
     }
 
     override fun onPause() {
+        inlineAuthentication?.flow?.onPause()
         glass.setActive(false)
         frameRate.setMoving(false)
         foreground = false
@@ -2028,6 +2154,7 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onStop() {
+        inlineAuthentication?.flow?.onStop()
         DeviceImages.removeListener(deviceImageListener)
         frameRate.stop()
         windowAdapter?.removeWindowLayoutInfoListener(foldListener)
@@ -2037,6 +2164,8 @@ class MainActivity : Activity(), AppleRepository.Listener {
     }
 
     override fun onDestroy() {
+        inlineAuthentication?.close(changingConfigurations = isChangingConfigurations)
+        inlineAuthentication = null
         accountActions.dismiss()
         repository.removeListener(this)
         google.removeListener(this)
@@ -2058,6 +2187,16 @@ class MainActivity : Activity(), AppleRepository.Listener {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         mapView.onSaveInstanceState(outState)
+        outState.putBoolean(
+            "inlineSignInPending",
+            pendingInlineAuthentication ||
+                signInState == AppleSignInState.Working ||
+                signInState == AppleSignInState.Verification,
+        )
+        outState.putBoolean("inlineSignInOfficial", signInState == AppleSignInState.Verification)
+        (signInState as? AppleSignInState.Failed)?.let {
+            outState.putIntArray("inlineSignInError", intArrayOf(it.title, it.detail))
+        }
         outState.putBoolean("displaySettingsOpen", displaySettingsOpen)
         outState.putString("selected", selectedId)
         outState.putInt("tab", activeTab)

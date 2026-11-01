@@ -344,6 +344,12 @@ class LoginActivity : Activity() {
         if (!resumed || !hasWindowFocus() || isFinishing || isDestroyed) return
         pendingAuthGeneration = null
         if (generation != credentialGeneration) return
+        if (intent.getBooleanExtra(INLINE_AUTH, false)) {
+            completed = true
+            setResult(RESULT_CREDENTIALS_READY)
+            finish()
+            return
+        }
         @Suppress("DEPRECATION")
         startActivityForResult(
             Intent(this, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
@@ -379,6 +385,8 @@ class LoginActivity : Activity() {
     }
 
     companion object {
+        const val INLINE_AUTH = "inlineAuthentication"
+        const val RESULT_CREDENTIALS_READY = RESULT_FIRST_USER
         const val ACCOUNT_ID = 1101
         const val PASSWORD_ID = 1102
         const val CONTINUE_ID = 1103

@@ -9,6 +9,7 @@ internal class AppleConnectionController(
     private val repository: AppleRepository,
     private val vault: LoginVault,
     private val foreground: () -> Boolean,
+    private val startAuthentication: () -> Unit,
 ) {
     var opening = false
         private set
@@ -27,7 +28,10 @@ internal class AppleConnectionController(
         if (opening) return
         opening = true
         @Suppress("DEPRECATION")
-        activity.startActivityForResult(Intent(activity, LoginActivity::class.java), REQUEST)
+        activity.startActivityForResult(
+            Intent(activity, LoginActivity::class.java).putExtra(LoginActivity.INLINE_AUTH, true),
+            REQUEST,
+        )
     }
 
     fun maintain() {
@@ -46,6 +50,12 @@ internal class AppleConnectionController(
         opening = false
     }
 
+    fun authenticatePrepared() {
+        opening = true
+        vault.markAttempt()
+        startAuthentication()
+    }
+
     private fun authenticate() {
         if (
             activity.isFinishing ||
@@ -57,13 +67,8 @@ internal class AppleConnectionController(
         opening = true
         LoginVault.clearStaged()
         vault.markAttempt()
-        // Native expiry does not mean the web session or trusted-browser cookies expired.
-        // Let Apple's existing session resume before the sign-in form needs credentials.
-        @Suppress("DEPRECATION")
-        activity.startActivityForResult(
-            Intent(activity, AuthActivity::class.java).putExtra(AuthActivity.USE_LOGIN, true),
-            REQUEST,
-        )
+        // Resume the existing trusted web session behind the native device list.
+        startAuthentication()
     }
 
     companion object {
