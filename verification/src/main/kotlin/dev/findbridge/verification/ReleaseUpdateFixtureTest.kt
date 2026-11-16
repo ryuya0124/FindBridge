@@ -25,11 +25,11 @@ import org.junit.Test
 @android.annotation.SuppressLint("ResourceType")
 class ReleaseUpdateFixtureTest {
     private val futureVersion
-        get() = InstrumentationRegistry.getArguments().getString("fixtureVersionName") ?: "3.3.1"
+        get() = InstrumentationRegistry.getArguments().getString("fixtureVersionName") ?: "3.3.2"
 
     private val futureCode
         get() =
-            InstrumentationRegistry.getArguments().getString("fixtureVersionCode")?.toLong() ?: 19L
+            InstrumentationRegistry.getArguments().getString("fixtureVersionCode")?.toLong() ?: 20L
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext

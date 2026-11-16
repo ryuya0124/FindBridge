@@ -5,6 +5,8 @@ import java.util.Locale
 
 /** Only public artwork CDNs; no account cookies or bearer tokens are sent to these URLs. */
 internal object DeviceImageUrls {
+    private val modelPattern = Regex("[A-Za-z0-9,._-]{1,80}")
+    private val colorPattern = Regex("[A-Za-z0-9,-]{0,100}")
     private val googleHosts =
         (1..6).flatMap { listOf("lh$it.googleusercontent.com", "lh$it.ggpht.com") }.toSet() +
             setOf("www.gstatic.com", "ssl.gstatic.com", "play-lh.googleusercontent.com")
@@ -51,8 +53,9 @@ internal object DeviceImageUrls {
         online: Boolean,
     ): String {
         if (
-            listOf(kind, model).any { !it.matches(Regex("[A-Za-z0-9,._-]{1,80}")) } ||
-                !color.matches(Regex("[A-Za-z0-9,-]{0,100}"))
+            !modelPattern.matches(kind) ||
+                !modelPattern.matches(model) ||
+                !colorPattern.matches(color)
         )
             return ""
         val root = base.trimEnd('/').ifEmpty { "https://statici.icloud.com" }

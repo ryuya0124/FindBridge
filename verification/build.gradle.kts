@@ -37,7 +37,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    if (includeGmsProbe) sourceSets.getByName("main").java.srcDir("src/gms/kotlin")
+    if (includeGmsProbe) sourceSets.getByName("main").java.directories.add("src/gms/kotlin")
 }
 
 kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 } }

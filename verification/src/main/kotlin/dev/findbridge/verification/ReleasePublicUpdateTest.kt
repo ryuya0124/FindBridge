@@ -13,10 +13,18 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Opt-in empty-emulator test of the published rc10 -> stable update, without synthetic metadata.
- */
+/** Opt-in empty-emulator test of a published update, without synthetic metadata. */
 class ReleasePublicUpdateTest {
+    private val sourceVersion
+        get() = InstrumentationRegistry.getArguments().getString("sourceVersionName") ?: "3.3.0"
+
+    private val targetVersion
+        get() = InstrumentationRegistry.getArguments().getString("targetVersionName") ?: "3.3.1"
+
+    private val targetCode
+        get() =
+            InstrumentationRegistry.getArguments().getString("targetVersionCode")?.toLong() ?: 19L
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val prefs
@@ -38,7 +46,7 @@ class ReleasePublicUpdateTest {
     fun downloadsThePublishedStableUpdateFromTheExistingRelease() {
         @Suppress("DEPRECATION")
         val installed = context.packageManager.getPackageInfo(context.packageName, 0)
-        assertEquals("3.3.0-rc10", installed.versionName)
+        assertEquals(sourceVersion, installed.versionName)
         prefs
             .edit()
             .clear()
@@ -98,8 +106,8 @@ class ReleasePublicUpdateTest {
     fun stableUpdateKeepsSettingsAndCleansItsDownloadedApk() {
         @Suppress("DEPRECATION")
         val installed = context.packageManager.getPackageInfo(context.packageName, 0)
-        assertEquals("3.3.0", installed.versionName)
-        assertEquals(18L, installed.longVersionCode)
+        assertEquals(targetVersion, installed.versionName)
+        assertEquals(targetCode, installed.longVersionCode)
         assertEquals(
             "keep-public-update-data",
             context.getSharedPreferences("public_update_fixture", 0).getString("marker", null),

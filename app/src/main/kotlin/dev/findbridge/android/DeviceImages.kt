@@ -6,7 +6,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.LruCache
-import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.util.concurrent.Executors
@@ -103,18 +102,9 @@ internal object DeviceImages {
                     status == 200 &&
                         connection.contentType.orEmpty().substringBefore(';').startsWith("image/")
                 )
-                require(connection.contentLengthLong <= 524288)
                 val bytes =
                     connection.inputStream.use { input ->
-                        val output = ByteArrayOutputStream()
-                        val buffer = ByteArray(4096)
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            require(output.size() + count <= 524288)
-                            output.write(buffer, 0, count)
-                        }
-                        output.toByteArray()
+                        BoundedInput.bytes(input, 524288, connection.contentLengthLong)
                     }
                 val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)

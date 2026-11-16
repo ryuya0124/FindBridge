@@ -7,6 +7,24 @@ import org.junit.Test
 
 class UrlPolicyTest {
     @Test
+    fun transportPathsRejectEncodedAliasesAndFragments() {
+        val base = "https://p169-fmipweb.icloud.com/fmipservice/client/web/"
+        val policies =
+            listOf(
+                "refreshClient" to UrlPolicy::isReadEndpoint,
+                "playSound" to UrlPolicy::isSoundEndpoint,
+                "lostDevice" to UrlPolicy::isLostModeEndpoint,
+                "saveLocFoundPref" to UrlPolicy::isNotificationEndpoint,
+            )
+        for ((action, accepts) in policies) {
+            assertTrue(accepts(base + action + "?token=a%2Fb%23c"))
+            assertFalse(accepts(base + action + "#ignored"))
+            assertFalse(accepts(base + "%" + action.first().code.toString(16) + action.drop(1)))
+            assertFalse(accepts(base.replace("/web/", "/web%2F") + action))
+        }
+    }
+
+    @Test
     fun embeddedSessionMessagesRequireAnExactICloudTopPage() {
         listOf("https://www.icloud.com/find", "https://www.icloud.com.cn/find").forEach {
             assertTrue(UrlPolicy.isSessionContainer(it))
