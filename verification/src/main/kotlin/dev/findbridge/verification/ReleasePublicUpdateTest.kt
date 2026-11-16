@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.*
@@ -59,8 +60,8 @@ class ReleasePublicUpdateTest {
             .edit()
             .putString("marker", "keep-public-update-data")
             .commit()
-        val main =
-            instrumentation.startActivitySync(
+        val scenario =
+            ActivityScenario.launch<android.app.Activity>(
                 Intent()
                     .setClassName(
                         context.packageName,
@@ -81,21 +82,27 @@ class ReleasePublicUpdateTest {
             )
             assertTrue(File(context.filesDir, "updates/ready.apk").isFile)
         } finally {
-            instrumentation.runOnMainSync { main.finish() }
+            // Finish the reader before staging the host-triggered installation. MainActivity's
+            // onStop otherwise replaces this delayed job with its own immediate idle attempt.
+            prefs.edit().putBoolean("automatic", false).commit()
+            scenario.close()
         }
-        context
-            .getSystemService(JobScheduler::class.java)
-            .schedule(
-                JobInfo.Builder(
-                        INSTALL_JOB,
-                        ComponentName(
-                            context.packageName,
-                            "dev.findbridge.android.update.UpdateJobService",
-                        ),
-                    )
-                    .setMinimumLatency(60_000)
-                    .build()
-            )
+        prefs.edit().putBoolean("automatic", true).commit()
+        val scheduled =
+            context
+                .getSystemService(JobScheduler::class.java)
+                .schedule(
+                    JobInfo.Builder(
+                            INSTALL_JOB,
+                            ComponentName(
+                                context.packageName,
+                                "dev.findbridge.android.update.UpdateJobService",
+                            ),
+                        )
+                        .setMinimumLatency(60_000)
+                        .build()
+                )
+        assertEquals(JobScheduler.RESULT_SUCCESS, scheduled)
         instrumentation.sendStatus(
             0,
             Bundle().apply { putString("publishedUpdate", "downloaded-and-verified") },
