@@ -1,5 +1,6 @@
 package dev.findbridge.android.update
 
+import dev.findbridge.android.BoundedInput
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -8,14 +9,17 @@ internal class GitHubUpdateClient(
     private val connect: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
 ) {
     @Volatile private var active: HttpURLConnection? = null
+    @Volatile private var canceled = false
 
     fun cancel() {
+        canceled = true
         active?.disconnect()
     }
 
     data class Response(val body: String?, val etag: String?)
 
     fun releases(etag: String?, previews: Boolean = true): Response {
+        check(!canceled)
         val connection =
             connect(
                 URL(
@@ -38,15 +42,7 @@ internal class GitHubUpdateClient(
             check(connection.responseCode == 200)
             val body =
                 connection.inputStream.use { input ->
-                    val output = java.io.ByteArrayOutputStream()
-                    val buffer = ByteArray(8192)
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        check(output.size() + count <= 1_048_576)
-                        output.write(buffer, 0, count)
-                    }
-                    output.toString("UTF-8")
+                    BoundedInput.utf8(input, 1_048_576, connection.contentLengthLong) { !canceled }
                 }
             return Response(if (previews) body else "[$body]", connection.getHeaderField("ETag"))
         } finally {

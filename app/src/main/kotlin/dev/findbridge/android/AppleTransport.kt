@@ -1,7 +1,6 @@
 package dev.findbridge.android
 
 import android.os.Looper
-import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -58,20 +57,14 @@ internal class AppleTransport(
                 // A denied operation is not proof that the account needs another sign-in.
                 else -> error("Apple service unavailable")
             }
-            val buffer = ByteArrayOutputStream()
-            connection.inputStream.use { input ->
-                val chunk = ByteArray(8192)
-                while (true) {
-                    val count = input.read(chunk)
-                    if (count == -1) break
-                    buffer.write(chunk, 0, count)
-                    check(buffer.size() <= RESPONSE_LIMIT)
+            val text =
+                connection.inputStream.use {
+                    BoundedInput.utf8(it, RESPONSE_LIMIT, connection.contentLengthLong, isCurrent)
                 }
-            }
             check(isCurrent())
             val response =
-                if (kind == AppleRequestKind.SOUND && buffer.size() == 0) JSONObject()
-                else JSONObject(buffer.toString(Charsets.UTF_8.name()))
+                if (kind == AppleRequestKind.SOUND && text.isEmpty()) JSONObject()
+                else JSONObject(text)
             if (response.optString("statusCode") in setOf("401", "421", "450"))
                 throw AppleAuthenticationExpiredException()
             val updates =

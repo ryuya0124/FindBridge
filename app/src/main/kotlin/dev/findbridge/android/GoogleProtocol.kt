@@ -15,12 +15,11 @@ internal object GoogleProtocol {
     const val ERROR = 6
     const val CLEARED = 7
     val dataOrigins = setOf("https://www.google.com")
+    private val dataPath = Regex("/android/find(?:/u/[0-9]{1,3})?/?")
 
     fun isDataPage(address: String): Boolean = runCatching {
         val u = Uri.parse(address)
-        isPage(address) &&
-            u.host == "www.google.com" &&
-            u.path.orEmpty().matches(Regex("/android/find(?:/u/[0-9]{1,3})?/?"))
+        isPage(address) && u.host == "www.google.com" && dataPath.matches(u.path.orEmpty())
     }
         .getOrDefault(false)
 
@@ -34,7 +33,7 @@ internal object GoogleProtocol {
                 (u.host == "accounts.youtube.com" &&
                     u.path in setOf("/accounts/SetSID", "/accounts/CheckCookie")) ||
                 (u.host == "www.google.com" &&
-                    (u.path.orEmpty().matches(Regex("/android/find(?:/u/[0-9]{1,3})?/?")) ||
+                    (dataPath.matches(u.path.orEmpty()) ||
                         u.path.orEmpty().trimEnd('/') == "/android/find/about" ||
                         u.path in setOf("/accounts/SetSID", "/accounts/CheckCookie"))))
     }

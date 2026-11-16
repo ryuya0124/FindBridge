@@ -22,15 +22,15 @@ Apple接続の責務は次のファイルへ分けています。Kotlinはktfmt�
 
 保存済みの同じアカウントを利用する際にCookieとWebStorageを全消去しません。明示的なログアウト・アカウントやパスワードの変更は従来どおり分離します。HTTPのSet-CookieをWebViewの同じプロファイルへ反映し、欠損していないCookieヘッダーだけをネイティブの暗号化セッションへ引き継ぎます。HTTP 403だけを認証切れとは判定しません。Appleからのサインイン通知メールを隠す処理や、通知設定の変更はありません。
 
-2026-10-30にレジストリで確認した安定版を固定しています。
+2026-11-16に公式レジストリで安定版を確認し、バージョンを固定しています。[依存関係・API・セキュリティ点検](MAINTENANCE.md)も参照してください。
 
 | 項目 | バージョン |
 | --- | --- |
 | compileSdk / targetSdk | Android 17 / API 37 |
 | minSdk / 配布ABI | API 28 / arm64-v8a |
 | Kotlin | 2.4.21 |
-| Android Gradle Plugin | 9.5.0 |
-| Gradle | 9.8.2 |
+| Android Gradle Plugin | 9.5.1 |
+| Gradle | 9.9.1 |
 | Android Build Tools | 37.0.0 |
 | Material Components（Material 3 Expressive） | 1.14.0 |
 | MapLibre Native Android | 13.7.1 |
@@ -52,6 +52,12 @@ sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
 ```
 
 デバッグAPKは `app/build/outputs/apk/debug/app-debug.apk` です。
+
+Gradle配布ZIPのSHA-256と、`gradle/verification-metadata.xml` に記録した依存ファイルのSHA-256を検証します。通常のビルドで検証を無効にしないでください。依存を更新する場合は、公式配布元を確認したうえで `--write-verification-metadata sha256` を付けたビルドを実行し、追加・変更されたハッシュをレビューします。aapt2はmacOS・Linux・Windowsの配布物を記録しています。
+
+`androidResources.localeFilters` は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語を保持します。中国語の簡体字・繁体字と地域別リソースを含み、アプリの8言語を維持します。新しい翻訳を追加する際はこのフィルターも更新してください。
+
+Apple・Google本人情報・更新メタデータ・端末画像のネイティブ応答は `BoundedInput` で読み取り、既存のサイズ上限を共有の処理で強制します。サイズが不明な応答でも上限を1バイト超えた段階で停止します。Appleのアカウント世代変更や更新確認のキャンセル後は、次のチャンクを読む前に中断します。`UrlPolicy` は読み取りと各操作のパスを別々に許可し、エンコードされた別表現やフラグメント付きのサービスURLを拒否します。
 
 ### リリース署名
 

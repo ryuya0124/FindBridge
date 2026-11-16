@@ -1,6 +1,5 @@
 package dev.findbridge.android
 
-import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import org.json.JSONObject
@@ -22,17 +21,11 @@ internal object GoogleIdentityClient {
         connection.setRequestProperty("Accept", "application/json")
         try {
             check(connection.responseCode == 200) { "Google identity unavailable" }
-            val output = ByteArrayOutputStream()
-            connection.inputStream.use { input ->
-                val chunk = ByteArray(4096)
-                while (true) {
-                    val count = input.read(chunk)
-                    if (count < 0) break
-                    check(output.size() + count <= 65_536)
-                    output.write(chunk, 0, count)
+            val text =
+                connection.inputStream.use {
+                    BoundedInput.utf8(it, 65_536, connection.contentLengthLong)
                 }
-            }
-            return parse(JSONObject(output.toString(Charsets.UTF_8.name())), expectedEmail)
+            return parse(JSONObject(text), expectedEmail)
         } finally {
             connection.disconnect()
         }

@@ -8,6 +8,46 @@ import org.junit.Test
 
 class GitHubUpdateClientTest {
     @Test
+    fun canceledBeforeOpeningNeverConnects() {
+        var opened = false
+        val client = GitHubUpdateClient {
+            opened = true
+            error("Canceled requests must not connect")
+        }
+        client.cancel()
+        assertThrows(IllegalStateException::class.java) { client.releases(null) }
+        assertFalse(opened)
+    }
+
+    @Test
+    fun cancelDuringABufferedResponseDoesNotReturnMetadata() {
+        lateinit var client: GitHubUpdateClient
+        var closed = false
+        val body =
+            object : ByteArrayInputStream("[]".toByteArray()) {
+                override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+                    super.read(buffer, offset, length).also { client.cancel() }
+            }
+        val connection =
+            object : HttpURLConnection(URL("https://api.github.com")) {
+                override fun connect() {}
+
+                override fun disconnect() {
+                    closed = true
+                }
+
+                override fun usingProxy() = false
+
+                override fun getResponseCode() = 200
+
+                override fun getInputStream() = body
+            }
+        client = GitHubUpdateClient { connection }
+        assertThrows(IllegalStateException::class.java) { client.releases(null) }
+        assertTrue(closed)
+    }
+
+    @Test
     fun conditionalMetadataRequestIsPublicAndAlwaysDisconnects() {
         var closed = false
         val connection =

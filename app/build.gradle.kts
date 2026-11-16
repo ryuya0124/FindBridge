@@ -13,8 +13,8 @@ android {
         applicationId = "dev.findbridge.android"
         minSdk = 28
         targetSdk = 37
-        versionCode = providers.gradleProperty("findbridgeVersionCode").orNull?.toInt() ?: 18
-        versionName = providers.gradleProperty("findbridgeVersionName").orNull ?: "3.3.0"
+        versionCode = providers.gradleProperty("findbridgeVersionCode").orNull?.toInt() ?: 19
+        versionName = providers.gradleProperty("findbridgeVersionName").orNull ?: "3.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += "arm64-v8a"
@@ -46,6 +46,25 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+    androidResources {
+        // Keep every supported language, including both Chinese scripts and their regions.
+        // Material/GMS translations for languages the app does not offer need not ship.
+        localeFilters +=
+            listOf(
+                "en",
+                "ja",
+                "zh",
+                "b+zh+Hans",
+                "b+zh+Hant",
+                "zh-rCN",
+                "zh-rTW",
+                "zh-rHK",
+                "ko",
+                "es",
+                "fr",
+                "de",
+            )
     }
     bundle { language { enableSplit = false } }
     packaging {
